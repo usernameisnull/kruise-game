@@ -1,0 +1,34 @@
+# 以下示例创建一个名为nginx的无状态负载，EIP将随Pod自动创建并绑定至Pod。
+# https://support.huaweicloud.com/usermanual-cce/cce_10_0734.html#section3
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+      annotations:
+        yangtse.io/pod-with-eip: "true"  # EIP跟随Pod创建
+        yangtse.io/eip-bandwidth-size: "5"   # EIP带宽
+        yangtse.io/eip-network-type: 5_bgp  # EIP类型
+        yangtse.io/eip-charge-mode: bandwidth  # EIP计费模式
+        yangtse.io/eip-bandwidth-name: test-eip-bandwidth-create  # EIP带宽名称
+    spec:
+      containers:
+        - name: container-0
+          image: nginx:alpine
+          resources:
+            limits:
+              cpu: 100m
+              memory: 200Mi
+            requests:
+              cpu: 100m
+              memory: 200Mi
+#      imagePullSecrets:
+#        - name: default-secret

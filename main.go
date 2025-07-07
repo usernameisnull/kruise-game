@@ -125,6 +125,7 @@ func main() {
 
 	restConfig := ctrl.GetConfigOrDie()
 	setRestConfig(restConfig)
+	// https://github.com/kubernetes-sigs/controller-runtime/blob/4c2e9cec2954e6d5a9522c65b2e22f24acb750b5/examples/builtins/main.go#L45
 	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{

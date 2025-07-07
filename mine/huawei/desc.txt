@@ -1,0 +1,68 @@
+➜ k describe po nginx-66c5bfc676-hjqjr
+Name:             nginx-66c5bfc676-hjqjr
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             192.168.1.158/192.168.1.158
+Start Time:       Fri, 04 Jul 2025 17:23:53 +0800
+Labels:           app=nginx
+                  pod-template-hash=66c5bfc676
+Annotations:      yangtse.io/allocated-eip-id: 4d8d14eb-4e3f-42cd-90ce-15b8aec8d456
+                  yangtse.io/allocated-ipv4-eip: 159.138.133.195
+                  yangtse.io/eip-bandwidth-name: test-eip-bandwidth-create
+                  yangtse.io/eip-bandwidth-size: 5
+                  yangtse.io/eip-charge-mode: bandwidth
+                  yangtse.io/eip-network-type: 5_bgp
+                  yangtse.io/pod-with-eip: true
+Status:           Running
+IP:               192.168.1.40
+IPs:
+  IP:           192.168.1.40
+Controlled By:  ReplicaSet/nginx-66c5bfc676
+Containers:
+  container-0:
+    Container ID:   containerd://1a1bc3f3dc7c9969a171d3637379a95cb1615a210c2692283fdadf3bd9af3aba
+    Image:          nginx:alpine
+    Image ID:       docker.io/library/nginx@sha256:5d1044294f0347e320d549e0add523dd3265580e9093458d92cf558db5ad62e5
+    Port:           <none>
+    Host Port:      <none>
+    State:          Running
+      Started:      Fri, 04 Jul 2025 17:24:03 +0800
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      cpu:     100m
+      memory:  200Mi
+    Requests:
+      cpu:        100m
+      memory:     200Mi
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-999fb (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True
+  Initialized                 True
+  Ready                       True
+  ContainersReady             True
+  PodScheduled                True
+Volumes:
+  kube-api-access-999fb:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   Guaranteed
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason                 Age                    From               Message
+  ----    ------                 ----                   ----               -------
+  Normal  Scheduled              8m44s                  default-scheduler  Successfully assigned default/nginx-66c5bfc676-hjqjr to 192.168.1.158
+  Normal  Pulling                8m35s                  kubelet            Pulling image "nginx:alpine"
+  Normal  SuccessfulMountVolume  8m34s (x2 over 8m43s)  kubelet            Successfully mounted volumes for pod "nginx-66c5bfc676-hjqjr_default(f3333030-c9d6-4e4c-a6e6-5f9efe41cdc5)"
+  Normal  Pulled                 8m34s                  kubelet            Successfully pulled image "nginx:alpine" in 846ms (846ms including waiting)
+  Normal  SuccessfulCreate       8m34s                  kubelet            Created container container-0
+  Normal  Started                8m34s                  kubelet            Started container container-0
