@@ -52,12 +52,6 @@ const (
 	ElbClassAnnotationKey = "kubernetes.io/elb.class"
 	ElbClassConfigName    = "ElbClass"
 
-	ElbAvailableZoneAnnotationKey        = "kubernetes.io/elb.availability-zones"
-	ElbAvailableZoneAnnotationConfigName = "ElbAvailableZone"
-
-	ElbConnLimitAnnotationKey = "kubernetes.io/elb.connection-limit"
-	ElbConnLimitConfigName    = "ElbConnLimit"
-
 	ElbSubnetAnnotationKey = "kubernetes.io/elb.subnet-id"
 	ElbSubnetConfigName    = "ElbSubnetId"
 
@@ -110,7 +104,47 @@ const (
 	LBHealthCheckSwitchConfigName    = "LBHealthCheckFlag"
 
 	LBHealthCheckOptionAnnotationKey = "kubernetes.io/elb.health-check-option"
-	LBHealthCHeckOptionConfigName    = "LBHealthCheckOption"
+
+	LBHealthCheckOptionsAnnotationKey = "kubernetes.io/elb.health-check-options"
+
+	LBHealthCHeckOptionConfigName = "LBHealthCheckOption"
+
+	ElbAutocreateAnnotationKey = "kubernetes.io/elb.autocreate"
+
+	ElbEnterpriseIDAnnotationKey = "kubernetes.io/elb.enterpriseID"
+
+	ElbSessionAffinityModeAnnotationKey = "kubernetes.io/elb.session-affinity-mode"
+
+	ElbProtocolPortAnnotationKey                      = "kubernetes.io/elb.protocol-port"
+	ElbCertIdAnnotationKey                            = "kubernetes.io/elb.cert-id"
+	ElbCertIdsAnnotationKey                           = "kubernetes.io/elb.cert-ids"
+	ElbAdaptiveWeightAnnotationKey                    = "kubernetes.io/elb.adaptive-weight"
+	ElbMulticlusterAnnotationKey                      = "kubernetes.io/elb.multicluster"
+	ElbMultivpcAnnotationKey                          = "kubernetes.io/elb.multivpc"
+	ElbMulticlusterLoadbalancerWeightAnnotationKey    = "kubernetes.io/elb.multicluster-loadbalancer-weight"
+	ElbMulticlusterResourceRecyclePolicyAnnotationKey = "kubernetes.io/elb.multicluster-resource-recycle-policy"
+	ElbPassThroughAnnotationKey                       = "kubernetes.io/elb.pass-through"
+	ElbAclIdAnnotationKey                             = "kubernetes.io/elb.acl-id"
+	ElbAclStatusAnnotationKey                         = "kubernetes.io/elb.acl-status"
+	ElbAclTypeAnnotationKey                           = "kubernetes.io/elb.acl-type"
+	ElbHwsNetworkTypeAnnotationKey                    = "kubernetes.io/hws-hostNetwork"
+	ElbKeepaliveTimeoutAnnotationKey                  = "kubernetes.io/elb.keepalive_timeout"
+	ElbClientTimeoutAnnotationKey                     = "kubernetes.io/elb.client_timeout"
+	ElbMemberTimeoutAnnotationKey                     = "kubernetes.io/elb.member_timeout"
+	ElbTagsAnnotationKey                              = "kubernetes.io/elb.tags"
+	ElbHttp2EnableAnnotationKey                       = "kubernetes.io/elb.http2-enable"
+	ElbXForwardPortAnnotationKey                      = "kubernetes.io/elb.x-forwarded-port"
+	ElbXForwardForPortAnnotationKey                   = "kubernetes.io/elb.x-forwarded-for-port"
+	ElbXForwardHostAnnotationKey                      = "kubernetes.io/elb.x-forwarded-host"
+	ElbXRealIpAnnotationKey                           = "kubernetes.io/elb.x-real-ip"
+	ElbGzipEnabledAnnotationKey                       = "kubernetes.io/elb.gzip-enabled"
+	ElbTlsCertificateIdsAnnotationKey                 = "kubernetes.io/elb.tls-certificate-ids"
+	ElbConnectionDrainEnabledAnnotationKey            = "kubernetes.io/elb.connection-drain-enable"
+	ElbConnectionDrainTimeoutAnnotationKey            = "kubernetes.io/elb.connection-drain-timeout"
+	ElbTransparentClientIpAnnotationKey               = "kubernetes.io/elb.transparent-client-ip"
+	ElbCustomEipIdAnnotationKey                       = "kubernetes.io/elb.custom-eip-id"
+	ElbPortRangesAnnotationKey                        = "kubernetes.io/elb.port-ranges"
+	ElbIpTargetEnabledAnnotationKey                   = "kubernetes.io/elb.ip-target-enabled"
 )
 
 const (
@@ -547,14 +581,6 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 			if strings.EqualFold(c.Value, string(ElbClassShared)) {
 				elbClass = ElbClassShared
 			}
-
-		case ElbConnLimitConfigName:
-			v, err := strconv.Atoi(c.Value)
-			if err != nil {
-				_ = fmt.Errorf("ignore invalid elb connection limit value: %s", c.Value)
-				continue
-			}
-			elbConnLimit = int32(v)
 		case ElbLbAlgorithmConfigName:
 			if strings.EqualFold(c.Value, ElbLbAlgorithmRoundRobin) {
 				elbLbAlgorithm = ElbLbAlgorithmRoundRobin
@@ -726,11 +752,6 @@ func (s *ElbPlugin) consSvc(sc *elbConfig, pod *corev1.Pod, c client.Client, ctx
 		ElbTransparentClientIPAnnotationKey:   strconv.FormatBool(sc.elbTransparentClientIP),
 		ElbXForwardedHostAnnotationKey:        strconv.FormatBool(sc.elbXForwardedHost),
 		LBHealthCheckSwitchAnnotationKey:      sc.lBHealthCheckSwitch,
-	}
-
-	if sc.elbClass == ElbClassDedicated {
-	} else {
-		svcAnnotations[ElbConnLimitAnnotationKey] = strconv.Itoa(int(sc.elbConnLimit))
 	}
 
 	if sc.elbIdleTimeout != -1 {
