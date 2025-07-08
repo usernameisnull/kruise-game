@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "3"
+    meta.helm.sh/release-name: kruise-game
+    meta.helm.sh/release-namespace: kruise-system
+  creationTimestamp: "2025-07-03T17:22:22Z"
+  generation: 3
+  labels:
+    app.kubernetes.io/managed-by: Helm
+    control-plane: kruise-game-controller-manager
+  name: kruise-game-controller-manager
+  namespace: kruise-game-system
+  resourceVersion: "4762611"
+  uid: a82b233a-38a6-4f6e-a7c3-498edb034de4
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      control-plane: kruise-game-controller-manager
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      creationTimestamp: null
+      labels:
+        control-plane: kruise-game-controller-manager
+    spec:
+      containers:
+        - args:
+            - --leader-elect=false
+            - --provider-config=/etc/kruise-game/config.toml
+            - --api-server-qps=5
+            - --api-server-qps-burst=10
+            - --scale-server-bind-address=:6000
+          command:
+            - /manager
+          env:
+            - name: NETWORK_TOTAL_WAIT_TIME
+              value: "60"
+            - name: NETWORK_PROBE_INTERVAL_TIME
+              value: "5"
+          image: swr.cn-southwest-2.myhuaweicloud.com/mabing/kruise-game-manager:v0.10.0-debug
+          imagePullPolicy: Always
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 8082
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+          name: manager
+          ports:
+            - containerPort: 8080
+              name: https
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /readyz
+              port: 8082
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources:
+            limits:
+              cpu: 500m
+              memory: 1Gi
+            requests:
+              cpu: 10m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /etc/kruise-game
+              name: provider-config
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: kruise-game-controller-manager
+      serviceAccountName: kruise-game-controller-manager
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - configMap:
+            defaultMode: 420
+            items:
+              - key: config.toml
+                path: config.toml
+            name: kruise-game-manager-config
+          name: provider-config
+status:
+  availableReplicas: 1
+  conditions:
+    - lastTransitionTime: "2025-07-03T17:25:52Z"
+      lastUpdateTime: "2025-07-03T17:25:52Z"
+      message: Deployment has minimum availability.
+      reason: MinimumReplicasAvailable
+      status: "True"
+      type: Available
+    - lastTransitionTime: "2025-07-03T17:22:22Z"
+      lastUpdateTime: "2025-07-07T09:23:51Z"
+      message: ReplicaSet "kruise-game-controller-manager-76587fb97c" has successfully
+        progressed.
+      reason: NewReplicaSetAvailable
+      status: "True"
+      type: Progressing
+  observedGeneration: 3
+  readyReplicas: 1
+  replicas: 1
+  updatedReplicas: 1

@@ -4,7 +4,7 @@
 ```bash
 helm upgrade \
 --install kruise openkruise/kruise \
---set manager.image.repository=openkruise-registry.cn-shanghai.cr.aliyuncs.com/openkruise/kruise-manager \
+--set manager.image.repository=swr.cn-southwest-2.myhuaweicloud.com/mabing/kruise-game-manager:v0.10.0-debug \
 --set featureGates="PodProbeMarkerGate=true"
 ```
 ### 安装kruise-game
@@ -13,9 +13,11 @@ chart的源代码在`https://github.com/openkruise/charts/blob/master/charts/kru
 helm install kruise-game openkruise/kruise-game --version 0.10.0 \
 --set image.repository=10.6.178.178:5000/kruise-game-manager
 ```
-- 安装后的资源
-在`kruise-game-system`里有一个ConfigMap  
-#### 安装实例
+安装后的资源  
+- 在`kruise-game-system`里有一个ConfigMap  
+- 有webhook
+
+#### 安装实例(例子)
 ```bash
 cat <<EOF | kubectl apply -f -
 apiVersion: game.kruise.io/v1alpha1
@@ -67,7 +69,9 @@ minecraft-0                                       1/1     Running   0          9
 minecraft-1                                       1/1     Running   0          2m7s
 minecraft-2                                       1/1     Running   0          2m40s
 
-root in 󱃾 a223(kruise-game-system) ~ via  v24.1.0
+root in 󱃾 cce(kruise-game-system) ~/daocloud
+➜ k delete gss minecraft
+gameserverset.game.kruise.io "minecraft" deleted
 ```
 #### 安装无头服务
 通过无头服务访问对应的pod  
@@ -106,6 +110,20 @@ kubectl patch gs minecraft-0 --type='merge'  -p  '{"metadata":{"annotations":{"g
 gameserver.game.kruise.io/minecraft-0 patched
 ```
 
+## 如何打包镜像
+build-image.sh
+
+## 如何本地运行程序
+把k8s集群里的deploy的replicas设置为0,在本地运行程序
+```bash
+export KUBECONFIG=/root/.kube/configs/config.cce.yaml
+go run main.go \
+--leader-elect=false \
+--provider-config=/root/huawei/openkruise/kruise-game/config/manager/config.toml
+```
+但是k8s服务器里的webhook依然在, 创建/更新的时候会有问题  
+- 移除远端的webhook?
+- 远端的deploy的replicas不设置为0, 仅仅是注释掉reconcil的部分,保留webhook的部分
 ## 与openkruise的关联在哪里?
 调了api: `github.com/openkruise/kruise-api`
 
@@ -204,6 +222,7 @@ metadata:
   resourceVersion: "357781984"
   uid: cb47c908-9af9-432f-a036-3495a44f8171
 ```
+这个cm里的min_port,max_port起什么作用?
 ## 华为的任务
 - 任务需求
     * ELB 适配开发
