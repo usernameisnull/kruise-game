@@ -21,6 +21,10 @@ enable = true
 max_port = 700
 min_port = 500
 block_ports = []
+[hwcloud.nlb]
+max_port = 1502
+min_port = 1000
+block_ports = []
 
 [volcengine]
 enable = true
