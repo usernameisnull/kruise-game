@@ -76,6 +76,7 @@ const (
 	ElbTransparentClientIPAnnotationKey = "kubernetes.io/elb.enable-transparent-client-ip"
 	ElbTransparentClientIPConfigName    = "ElbTransparentClientIP"
 
+	// only performance elb supports kubernetes.io/elb.x-forwarded-host"
 	ElbXForwardedHostAnnotationKey = "kubernetes.io/elb.x-forwarded-host"
 	ElbXForwardedHostConfigName    = "ElbXForwardedHost"
 
@@ -153,10 +154,10 @@ const (
 	ProtocolTCPUDP   corev1.Protocol = "TCPUDP"
 	FixedConfigName                  = "Fixed"
 
-	ElbNetwork        = "HwCloud-ELB"
-	AliasELB          = "ELB-Network"
-	ElbClassDedicated = "dedicated"
-	ElbClassShared    = "shared"
+	ElbNetwork          = "HwCloud-ELB"
+	AliasELB            = "ELB-Network"
+	ElbClassPerformance = "performance"
+	ElbClassUnion       = "union"
 
 	ElbLbAlgorithmRoundRobin = "ROUND_ROBIN"
 	ElbLbAlgorithmLeastConn  = "LEAST_CONNECTIONS"
@@ -214,6 +215,7 @@ func (s *ElbPlugin) Init(c client.Client, options cloudprovider.CloudProviderOpt
 	s.maxPort = elbOptions.MaxPort
 	s.blockPorts = elbOptions.BlockPorts
 
+	// get all service
 	svcList := &corev1.ServiceList{}
 	err := c.List(ctx, svcList)
 	if err != nil {
@@ -230,6 +232,7 @@ func initLbCache(svcList []corev1.Service, minPort, maxPort int32, blockPorts []
 	newPodAllocate := make(map[string]string)
 	for _, svc := range svcList {
 		lbId := svc.Annotations[ElbIdAnnotationKey]
+		// Associate an existing ELB.
 		if lbId != "" && svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
 			// init cache for that lb
 			if newCache[lbId] == nil {
@@ -521,7 +524,7 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 	externalTrafficPolicy := corev1.ServiceExternalTrafficPolicyTypeCluster
 	publishNotReadyAddresses := false
 
-	elbClass := ElbClassDedicated
+	elbClass := ElbClassPerformance
 	elbConnLimit := int32(-1)
 	elbLbAlgorithm := ElbLbAlgorithmRoundRobin
 	elbSessionAffinityFlag := "off"
@@ -578,8 +581,8 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 			}
 			publishNotReadyAddresses = v
 		case ElbClassConfigName:
-			if strings.EqualFold(c.Value, string(ElbClassShared)) {
-				elbClass = ElbClassShared
+			if strings.EqualFold(c.Value, string(ElbClassUnion)) {
+				elbClass = ElbClassUnion
 			}
 		case ElbLbAlgorithmConfigName:
 			if strings.EqualFold(c.Value, ElbLbAlgorithmRoundRobin) {
