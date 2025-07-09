@@ -1220,6 +1220,34 @@ block_ports = []
 
 ---
 
+#### Example
+
+```yaml
+apiVersion: game.kruise.io/v1alpha1
+kind: GameServerSet
+metadata:
+  name: hw-elb-nginx
+  namespace: default
+spec:
+  replicas: 1
+  updateStrategy:
+    rollingUpdate:
+      podUpdatePolicy: InPlaceIfPossible
+  network:
+    networkType: HwCloud-ELB
+    networkConf:
+      - name: ElbIds
+        value: "8f4cxxxx-a659-40dc-8c77-6068b036xxxx,8f4cyyyy-a659-40dc-8c77-6068b036yyyy"
+      - name: PortProtocols
+        value: "80/TCP,7777/UDP"
+  gameServerTemplate:
+    spec:
+      containers:
+        - image: nginx
+          name: nginx
+```
+---
+
 ### Volcengine-EIP
 
 #### Plugin name
