@@ -1,10 +1,12 @@
+---
+# 这里没有任何网络插件的信息
 apiVersion: game.kruise.io/v1alpha1
 kind: GameServerSet
 metadata:
   name: minecraft
   namespace: kruise-game-system
 spec:
-  replicas: 5
+  replicas: 3
   updateStrategy:
     rollingUpdate:
       podUpdatePolicy: InPlaceIfPossible
@@ -13,3 +15,29 @@ spec:
       containers:
         - image: registry.cn-hangzhou.aliyuncs.com/acs/minecraft-demo:1.12.2
           name: minecraft
+
+---
+# 这个是阿里的例子修改的: https://github.com/openkruise/kruise-game/blob/master/docs/%E4%B8%AD%E6%96%87/%E7%94%A8%E6%88%B7%E6%89%8B%E5%86%8C/%E7%BD%91%E7%BB%9C%E6%A8%A1%E5%9E%8B.md#alibabacloud-natgw
+apiVersion: game.kruise.io/v1alpha1
+kind: GameServerSet
+metadata:
+  name: gs-natgw
+  namespace: kruise-game-system
+spec:
+  replicas: 1
+  updateStrategy:
+    rollingUpdate:
+      podUpdatePolicy: InPlaceIfPossible
+  network:
+    # networkType: AlibabaCloud-NATGW
+    networkType: HwCloud-ELB
+    networkConf:
+      - name: ElbIds
+        value: 8f4cf216-a659-40dc-8c77-6068b036ba56
+  gameServerTemplate:
+    spec:
+      containers:
+        - image: registry.cn-hangzhou.aliyuncs.com/gs-demo/gameserver:network
+          name: gameserver
+---
+# 写一个简单的用nginx的?

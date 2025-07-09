@@ -124,6 +124,19 @@ go run main.go \
 但是k8s服务器里的webhook依然在, 创建/更新的时候会有问题  
 - 移除远端的webhook?
 - 远端的deploy的replicas不设置为0, 仅仅是注释掉reconcil的部分,保留webhook的部分
+
+### 使用ktctl
+- 8080:8080, 第一个是本地的,需要先在本地启动main.go, 第二个是远端的TargetPort,不是get svc看到的port  
+  ```
+  ktctl -c /root/.kube/configs/config.cce.yaml -n kruise-game-system exchange kruise-game-controller-manager-metrics-service --expose 8080:8080
+
+  ktctl -c /root/.kube/configs/config.cce.yaml -n kruise-game-system exchange kruise-game-external-scaler  --expose 6000:6000
+
+  ktctl -c /root/.kube/configs/config.cce.yaml -n kruise-game-system exchange kruise-game-webhook-service   --expose 9876:9876
+  ```
+- `kruise-game-controller-manager-metrics-service`的`targetPort`是字符串`https`,需要到pod里去查看, 如果你把pod所在的Deployment的replicas scale到0,那么
+ktctl会报找不到这个端口, 你可以在本地让ktctl起来后,再scale 到 0.
+
 ## 与openkruise的关联在哪里?
 调了api: `github.com/openkruise/kruise-api`
 
@@ -260,3 +273,38 @@ https://support.huaweicloud.com/cce/index.html
   - 文档: https://support.huaweicloud.com/sdkreference-eip/eip_sdk_0001.html
   - 文档: https://github.com/huaweicloud/huaweicloud-sdk-go-v3
   - 示例代码: https://support.developer.huaweicloud.com/doc/development/Network-capability-samples-code/codelabs-EIP
+
+## 开发中遇到的问题
+### FailedScheduling
+```
+4m31s       Warning   FailedScheduling        pod/minecraft-2                                     0/1 nodes are available: 1 Too many pods. preemption: 0/1 nodes are available: 1 No preemption victims found for incoming pod.
+9m47s       Warning   Unschedulable           gameserver/minecraft-2                              0/1 nodes are available: 1 Too many pods. preemption: 0/1 nodes are available: 1 No preemption victims found for incoming pod.
+```
+是什么导致的无法调度呢? 把pod缩小为3个就ok了
+
+### webhook 拒绝
+使用example.yaml里的第二个yaml创建  
+在本地启动的服务报:  
+```
+E0708 16:34:06.926218  193271 gameserver_manager.go:231] failed to patch Pod gs-natgw-0 in kruise-game-system,because of admission webhook "kruise-game-webhook-service.kruise-game-system.svc" denied the request: services "gs-natgw-0" is forbidden: loadBalancerID[elb-306e] is invalid.
+```
+是因为ELB的id用错了  
+elb-306e: 是ELB的名字  
+![8f4cf216-a659-40dc-8c77-6068b036ba56: 才是ELB的id](./huawei/ELB/正确的ID.png)  
+这个loadBalancerID[elb-306e] is invalid应该是华为CCE报的错误  
+
+
+### 没有找到插件
+应该是controller-manager里没有相关的插件
+```bash
+root in 󱃾 cce(kruise-game-system) ~ via  v24.1.0
+➜ k apply -f /tmp/hw-example.yaml
+Error from server (Forbidden): error when creating "/tmp/hw-example.yaml": admission webhook "kruise-game-webhook-service.kruise-game-system.svc" denied the request: network type must be one of [Kubernetes-HostPort Kubernetes-Ingress Kubernetes-NodePort AlibabaCloud-EIP AlibabaCloud-Multi-NLBs AlibabaCloud-NATGW AlibabaCloud-NLB AlibabaCloud-NLB-SharedPort AlibabaCloud-SLB AlibabaCloud-SLB-SharedPort AlibabaCloud-AutoNLBs Volcengine-CLB Volcengine-EIP TencentCloud-CLB]
+```
+
+### 服务的端口
+OKG里华为ELB的代码生成的service没有端口,导致失败...那么阿里是怎么做的,阿里的例子里没有指定这个端口号怎么对应啊
+
+## TODO
+https://github.com/openkruise/kruise-game/blob/master/docs/%E4%B8%AD%E6%96%87/%E7%94%A8%E6%88%B7%E6%89%8B%E5%86%8C/%E7%BD%91%E7%BB%9C%E6%A8%A1%E5%9E%8B.md, 
+这个文档需的`当前支持的网络插件`要添加华为的ELB/EIP的信息, 应该还有个对应的英文文档也需要添加
