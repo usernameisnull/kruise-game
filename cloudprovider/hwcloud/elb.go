@@ -24,8 +24,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -88,7 +89,7 @@ const (
 
 	ElbRequestTimeoutAnnotationKey = "kubernetes.io/elb.request-timeout"
 	ElbRequestTimeoutConfigName    = "ElbRequestTimeout"
-
+	// TODO: remove
 	ElbResponseTimeoutAnnotationKey = "kubernetes.io/elb.response-timeout"
 	ElbResponseTimeoutConfigName    = "ElbResponseTimeout"
 
@@ -108,7 +109,8 @@ const (
 
 	LBHealthCheckOptionsAnnotationKey = "kubernetes.io/elb.health-check-options"
 
-	LBHealthCHeckOptionConfigName = "LBHealthCheckOption"
+	LBHealthCHeckOptionConfigName  = "LBHealthCheckOption"
+	LBHealthCHeckOptionsConfigName = "LBHealthCheckOptions"
 
 	ElbAutocreateAnnotationKey = "kubernetes.io/elb.autocreate"
 
@@ -196,7 +198,8 @@ type elbConfig struct {
 	publishNotReadyAddresses  bool
 
 	lBHealthCheckSwitch  string
-	lBHealtchCheckOption string
+	lBHealthCheckOption  string
+	lBHealthCheckOptions string
 }
 
 func (s *ElbPlugin) Name() string {
@@ -294,7 +297,7 @@ func (s *ElbPlugin) OnPodUpdated(c client.Client, pod *corev1.Pod, ctx context.C
 		Namespace: pod.GetNamespace(),
 	}, svc)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if k8serrors.IsNotFound(err) {
 			service, err := s.consSvc(sc, pod, c, ctx)
 			if err != nil {
 				return pod, cperrors.ToPluginError(err, cperrors.ParameterError)
@@ -405,7 +408,7 @@ func (s *ElbPlugin) OnPodDeleted(c client.Client, pod *corev1.Pod, ctx context.C
 	var podKeys []string
 	if sc.isFixed {
 		gss, err := util.GetGameServerSetOfPod(pod, c, ctx)
-		if err != nil && !errors.IsNotFound(err) {
+		if err != nil && !k8serrors.IsNotFound(err) {
 			return cperrors.ToPluginError(err, cperrors.ApiCallError)
 		}
 		// gss exists in cluster, do not deAllocate.
@@ -523,8 +526,9 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 
 	externalTrafficPolicy := corev1.ServiceExternalTrafficPolicyTypeCluster
 	publishNotReadyAddresses := false
-
-	elbClass := ElbClassPerformance
+	// https://support.huaweicloud.com/usermanual-cce/cce_10_0385.html#section1
+	// The default value is "union".
+	elbClass := ElbClassUnion
 	elbConnLimit := int32(-1)
 	elbLbAlgorithm := ElbLbAlgorithmRoundRobin
 	elbSessionAffinityFlag := "off"
@@ -536,7 +540,8 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 	elbResponseTimeout := int32(-1)
 
 	lBHealthCheckSwitch := "on"
-	LBHealthCHeckOptionConfig := ""
+	lBHealthCHeckOptionConfig := ""
+	lBHealthCHeckOptionsConfig := ""
 
 	for _, c := range conf {
 		switch c.Name {
@@ -581,28 +586,27 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 			}
 			publishNotReadyAddresses = v
 		case ElbClassConfigName:
-			if strings.EqualFold(c.Value, string(ElbClassUnion)) {
-				elbClass = ElbClassUnion
+			if !strings.EqualFold(c.Value, ElbClassPerformance) && !strings.EqualFold(c.Value, ElbClassUnion) {
+				return nil, fmt.Errorf("invalid ElbClass value: %s, use '%s' or '%s'",
+					c.Value, ElbClassPerformance, ElbClassUnion)
 			}
+			elbClass = c.Value
 		case ElbLbAlgorithmConfigName:
-			if strings.EqualFold(c.Value, ElbLbAlgorithmRoundRobin) {
-				elbLbAlgorithm = ElbLbAlgorithmRoundRobin
+			if !strings.EqualFold(c.Value, ElbLbAlgorithmRoundRobin) &&
+				!strings.EqualFold(c.Value, ElbLbAlgorithmLeastConn) &&
+				!strings.EqualFold(c.Value, ElbLbAlgorithmSourceIP) {
+				return nil, fmt.Errorf("invalid ElbLbAlgorithm value: %s, use '%s' or '%s' or '%s'",
+					c.Value, ElbLbAlgorithmRoundRobin, ElbLbAlgorithmLeastConn, ElbLbAlgorithmSourceIP)
 			}
-
-			if strings.EqualFold(c.Value, ElbLbAlgorithmLeastConn) {
-				elbLbAlgorithm = ElbLbAlgorithmLeastConn
-			}
-
-			if strings.EqualFold(c.Value, ElbLbAlgorithmSourceIP) {
-				elbLbAlgorithm = ElbLbAlgorithmSourceIP
-			}
+			elbLbAlgorithm = c.Value
 		case ElbSessionAffinityFlagConfigName:
-			if strings.EqualFold(c.Value, "on") {
-				elbSessionAffinityFlag = "on"
+			if !strings.EqualFold(c.Value, "on") && !strings.EqualFold(c.Value, "off") {
+				return nil, fmt.Errorf("invalid ElbSessionAffinityFlag value: %s, use 'on' or 'off'", c.Value)
 			}
+			elbSessionAffinityFlag = c.Value
 		case ElbSessionAffinityOptionConfigName:
 			if json.Valid([]byte(c.Value)) {
-				LBHealthCHeckOptionConfig = c.Value
+				lBHealthCHeckOptionConfig = c.Value
 			} else {
 				return nil, fmt.Errorf("invalid elb session affinity option value: %s", c.Value)
 			}
@@ -659,6 +663,7 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 				continue
 			}
 		case LBHealthCheckSwitchConfigName:
+			//TODO: allow uppercase?
 			checkSwitch := strings.ToLower(c.Value)
 			if checkSwitch != "on" && checkSwitch != "off" {
 				return nil, fmt.Errorf("invalid lb health check switch value: %s", c.Value)
@@ -666,11 +671,21 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 			lBHealthCheckSwitch = checkSwitch
 		case LBHealthCHeckOptionConfigName:
 			if json.Valid([]byte(c.Value)) {
-				LBHealthCHeckOptionConfig = c.Value
+				lBHealthCHeckOptionConfig = c.Value
 			} else {
-				return nil, fmt.Errorf("invalid lb health check option value: %s", c.Value)
+				return nil, fmt.Errorf("invalid LBHealthCheckOption value: %s", c.Value)
+			}
+		case LBHealthCHeckOptionsConfigName:
+			if json.Valid([]byte(c.Value)) {
+				lBHealthCHeckOptionsConfig = c.Value
+			} else {
+				return nil, fmt.Errorf("invalid LBHealthCheckOptions value: %s", c.Value)
 			}
 		}
+	}
+	// https://support.huaweicloud.com/usermanual-cce/cce_10_0385.html#section3
+	if LBHealthCheckSwitchConfigName == "on" && lBHealthCHeckOptionsConfig != "" && lBHealthCHeckOptionConfig != "" {
+		return nil, errors.New("LBHealthCheckOptions and LBHealthCheckOption cannot be set simultaneously.")
 	}
 	return &elbConfig{
 		lbIds:                     lbIds,
@@ -690,7 +705,8 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 		elbRequestTimeout:         elbRequestTimeout,
 		elbResponseTimeout:        elbResponseTimeout,
 		lBHealthCheckSwitch:       lBHealthCheckSwitch,
-		lBHealtchCheckOption:      LBHealthCHeckOptionConfig,
+		lBHealthCheckOption:       lBHealthCHeckOptionConfig,
+		lBHealthCheckOptions:      lBHealthCHeckOptionsConfig,
 	}, nil
 }
 
@@ -770,7 +786,12 @@ func (s *ElbPlugin) consSvc(sc *elbConfig, pod *corev1.Pod, c client.Client, ctx
 	}
 
 	if sc.lBHealthCheckSwitch == "on" {
-		svcAnnotations[LBHealthCheckOptionAnnotationKey] = sc.lBHealtchCheckOption
+		if sc.lBHealthCheckOption != "" {
+			svcAnnotations[LBHealthCheckOptionAnnotationKey] = sc.lBHealthCheckOption
+		}
+		if sc.lBHealthCheckOptions != "" {
+			svcAnnotations[LBHealthCheckOptionsAnnotationKey] = sc.lBHealthCheckOptions
+		}
 	}
 
 	svc := &corev1.Service{
