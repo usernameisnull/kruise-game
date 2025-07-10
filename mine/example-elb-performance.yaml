@@ -1,0 +1,48 @@
+# 这个是文档里的
+# https://github.com/openkruise/kruise-game/blob/master/docs/%E4%B8%AD%E6%96%87/%E7%94%A8%E6%88%B7%E6%89%8B%E5%86%8C/%E7%BD%91%E7%BB%9C%E6%A8%A1%E5%9E%8B.md#%E7%A4%BA%E4%BE%8B%E8%AF%B4%E6%98%8E-5
+apiVersion: game.kruise.io/v1alpha1
+kind: GameServerSet
+metadata:
+  name: gs-elb-performance
+  namespace: kruise-game-system
+spec:
+  replicas: 2
+  updateStrategy:
+    rollingUpdate:
+      podUpdatePolicy: InPlaceIfPossible
+  network:
+    networkType: HwCloud-ELB
+    networkConf:
+      - name: ElbIds
+        value: 8f4cf216-a659-40dc-8c77-6068b036ba56
+      # - name: ContainerPorts
+      #   value: "gameserver:80"
+      - name: PortProtocols
+        value: "80/TCP"
+      - name: ElbClass
+        value: performance
+#      - name: kubernetes.io/elb.id
+#        value: 8f4cf216-a659-40dc-8c77-6068b036ba56
+  gameServerTemplate:
+    spec:
+      containers:
+#        - image: registry.cn-hangzhou.aliyuncs.com/gs-demo/gameserver:network
+        - image: nginx
+          name: nginx
+          ports:
+            - containerPort: 80
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          volumeMounts:
+            - name: nginx-html
+              mountPath: /usr/share/nginx/html
+          lifecycle:
+            postStart:
+              exec:
+                command: [ "/bin/sh", "-c", "echo \"<html><body><h1>Welcome to $POD_NAME</h1></body></html>\" > /usr/share/nginx/html/index.html" ]
+      volumes:
+        - name: nginx-html
+          emptyDir: { }

@@ -1,0 +1,171 @@
+# 这个是example.yaml里第二个例子的service的输出
+apiVersion: v1
+kind: Service
+metadata:
+  # 主要看这个annotations的部分
+  annotations:
+    game.kruise.io/network-config-hash: "3313370553"
+    kubernetes.io/elb.class: performance
+    kubernetes.io/elb.enable-transparent-client-ip: "false"
+    kubernetes.io/elb.health-check-flag: "on"
+    kubernetes.io/elb.health-check-option: ""
+    kubernetes.io/elb.id: 8f4cf216-a659-40dc-8c77-6068b036ba56
+    kubernetes.io/elb.lb-algorithm: ROUND_ROBIN
+    kubernetes.io/elb.mark: "0"
+    kubernetes.io/elb.session-affinity-flag: "off"
+    kubernetes.io/elb.session-affinity-option: ""
+    kubernetes.io/elb.x-forwarded-host: "false"
+  creationTimestamp: "2025-07-09T07:34:39Z"
+  finalizers:
+  - service.kubernetes.io/load-balancer-cleanup
+  name: gs-natgw-0
+  namespace: kruise-game-system
+  ownerReferences:
+  - apiVersion: v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Pod
+    name: gs-natgw-0
+    uid: 933c3e67-2e2b-41c8-b25e-6d69a42a14da
+  resourceVersion: "5741362"
+  uid: 2ad8e721-e18e-4c7c-be6d-04a1029ac6a7
+spec:
+  allocateLoadBalancerNodePorts: true
+  clusterIP: 10.247.115.19
+  clusterIPs:
+  - 10.247.115.19
+  externalTrafficPolicy: Cluster
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  loadBalancerIP: 192.168.0.147
+  ports:
+  - name: 80-tcp
+    nodePort: 30606
+    port: 541
+    protocol: TCP
+    targetPort: 80
+  selector:
+    statefulset.kubernetes.io/pod-name: gs-natgw-0
+  sessionAffinity: None
+  type: LoadBalancer
+status:
+  loadBalancer:
+    ingress:
+    - ip: 192.168.0.147
+    - ip: 189.1.225.136
+
+---
+# kubernetes.io/elb.class: union, 设置为共享后,页面无法访问,status.loadBalancer.ingress的ip也没有了.
+# 应该是有问题kubernetes.io/elb.eip-id都没有值
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    game.kruise.io/network-config-hash: "1134931715"
+    kubernetes.io/elb.class: union
+    kubernetes.io/elb.eip-id: ""
+    kubernetes.io/elb.enable-transparent-client-ip: "false"
+    kubernetes.io/elb.health-check-flag: "on"
+    kubernetes.io/elb.id: 8f4cf216-a659-40dc-8c77-6068b036ba56
+    kubernetes.io/elb.lb-algorithm: ROUND_ROBIN
+    kubernetes.io/elb.mark: "0"
+    kubernetes.io/elb.session-affinity-flag: "off"
+    kubernetes.io/elb.session-affinity-option: ""
+  creationTimestamp: "2025-07-09T09:42:16Z"
+  finalizers:
+  - service.kubernetes.io/load-balancer-cleanup
+  name: gs-natgw-0
+  namespace: kruise-game-system
+  ownerReferences:
+  - apiVersion: v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Pod
+    name: gs-natgw-0
+    uid: 4740b838-645f-4554-af9f-eb337ae77f7b
+  resourceVersion: "5786104"
+  uid: 12da6191-5e4d-4465-8657-2011bfeda3df
+spec:
+  allocateLoadBalancerNodePorts: true
+  clusterIP: 10.247.48.122
+  clusterIPs:
+  - 10.247.48.122
+  externalTrafficPolicy: Cluster
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  loadBalancerIP: 192.168.0.147
+  ports:
+  - name: 80-tcp
+    nodePort: 32170
+    port: 529
+    protocol: TCP
+    targetPort: 80
+  selector:
+    statefulset.kubernetes.io/pod-name: gs-natgw-0
+  sessionAffinity: None
+  type: LoadBalancer
+status:
+  loadBalancer:
+    ingress:
+    - ip: 192.168.0.147
+
+---
+# 设置了2个gss用同一个ELB又可以
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    game.kruise.io/network-config-hash: "1134931715"
+    kubernetes.io/elb.class: union
+    kubernetes.io/elb.eip-id: ""
+    kubernetes.io/elb.enable-transparent-client-ip: "false"
+    kubernetes.io/elb.health-check-flag: "on"
+    kubernetes.io/elb.health-check-option: ""
+    kubernetes.io/elb.id: 8f4cf216-a659-40dc-8c77-6068b036ba56
+    kubernetes.io/elb.lb-algorithm: ROUND_ROBIN
+    kubernetes.io/elb.mark: "0"
+    kubernetes.io/elb.session-affinity-flag: "off"
+    kubernetes.io/elb.session-affinity-option: ""
+  creationTimestamp: "2025-07-10T02:35:28Z"
+  finalizers:
+    - service.kubernetes.io/load-balancer-cleanup
+  name: gs-natgw-union-1-0
+  namespace: kruise-game-system
+  ownerReferences:
+    - apiVersion: v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: Pod
+      name: gs-natgw-union-1-0
+      uid: 876021e3-31b2-4ce1-805f-cd47c968d554
+  resourceVersion: "6137255"
+  uid: bad7e79b-df98-4083-ac53-243eae9a8426
+spec:
+  allocateLoadBalancerNodePorts: true
+  clusterIP: 10.247.221.79
+  clusterIPs:
+    - 10.247.221.79
+  externalTrafficPolicy: Cluster
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+    - IPv4
+  ipFamilyPolicy: SingleStack
+  loadBalancerIP: 192.168.0.147
+  ports:
+    - name: 80-tcp
+      nodePort: 32675
+      port: 554
+      protocol: TCP
+      targetPort: 80
+  selector:
+    statefulset.kubernetes.io/pod-name: gs-natgw-union-1-0
+  sessionAffinity: None
+  type: LoadBalancer
+status:
+  loadBalancer:
+    ingress:
+      - ip: 192.168.0.147

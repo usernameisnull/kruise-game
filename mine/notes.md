@@ -307,4 +307,79 @@ OKG里华为ELB的代码生成的service没有端口,导致失败...那么阿里
 
 ## TODO
 https://github.com/openkruise/kruise-game/blob/master/docs/%E4%B8%AD%E6%96%87/%E7%94%A8%E6%88%B7%E6%89%8B%E5%86%8C/%E7%BD%91%E7%BB%9C%E6%A8%A1%E5%9E%8B.md, 
-这个文档需的`当前支持的网络插件`要添加华为的ELB/EIP的信息, 应该还有个对应的英文文档也需要添加
+这个文档需的`当前支持的网络插件`要添加华为的ELB/EIP的信息, 应该还有个对应的英文文档也需要添加  
+
+docs/中文/用户手册/网络模型.md 里有HwCloud-ELB的介绍,但是`spec.network.networkConf[0].name`写的是`ClbIds`, 应该是`ElbIds` -- 已修改  
+
+
+支持多个ELB?  
+用逗号分割, 是不是之间抄的阿里的, 所以也直接超过来了?  
+
+### kubernetes.io/elb.x-forwarded-host
+https://github.com/openkruise/kruise-game/blob/master/docs/%E4%B8%AD%E6%96%87/%E7%94%A8%E6%88%B7%E6%89%8B%E5%86%8C/%E7%BD%91%E7%BB%9C%E6%A8%A1%E5%9E%8B.md#%E7%A4%BA%E4%BE%8B%E8%AF%B4%E6%98%8E-5  
+用这个例子, 会报这个错误: 
+```
+2025-07-09T14:57:48+08:00	ERROR	Reconciler error	{"controller": "gameserver-controller", "object": {"name":"gs-natgw-0","namespace":"kruise-game-system"}, "namespace": "kruise-game-system", "name": "gs-natgw-0", "reconcileID": "697cca4a-6650-4052-a58a-fab9a4203161", "error": "admission webhook \"kruise-game-webhook-service.kruise-game-system.svc\" denied the request: admission webhook \"validate.crd.service\" denied the request: only performance elb supports kubernetes.io/elb.x-forwarded-host"}
+```
+
+## parseLbConfig
+返回的错误会被一直reconcile, 删gss/pod也删除不掉   
+
+## kubernetes.io/elb.class
+`kubernetes.io/elb.class`设置为union没有办法访问, `status.loadBalancer.ingress`没有第二个ip, 但是多出一个`kubernetes.io/elb.eip-id`的annotation,参见example-svc-output.yaml      
+这个好像又不是问题   
+```text
+status:
+  loadBalancer:
+    ingress:
+    - ip: 192.168.0.147
+    - ip: 189.1.225.136
+```
+
+## 每个pod都对应一个svc
+```bash
+root in 󱃾 cce(kruise-game-system) kruise-game-notes/mine on  notes [✘!?] 
+➜ k get po|grep gs-elb
+gs-elb-performance-0                                               1/1     Running   0          23m
+gs-elb-performance-1                                               1/1     Running   0          23m
+
+root in 󱃾 cce(kruise-game-system) kruise-game-notes/mine on  notes [✘!?] 
+➜ k get svc|grep gs-elb
+gs-elb-performance-0                             LoadBalancer   10.247.118.203   189.1.225.136,192.168.0.147   507:31157/TCP   2m2s
+gs-elb-performance-1                             LoadBalancer   10.247.121.247   189.1.225.136,192.168.0.147   509:30684/TCP   2m6s
+```
+
+## CCE Turbo集群每个节点的pod数受网卡限制
+CCE Turbo集群中，节点最大实例数由节点可使用的网卡数量决定。  
+https://support.huaweicloud.com/productdesc-cce/cce_productdesc_0005.html#section4  
+一个新加的节点啥都没干, 6个pod没了  
+![new-node-used-6pods.png](new-node-used-6pods.png)
+```bash
+root in 󱃾 cce(kruise-game-system) ~/daocloud took 2s
+➜ k get po -owide -A|grep '192.168.1.87'
+default              node-shell-8kf28                                                   1/1     Running   0               4m14s   192.168.1.35    192.168.1.87    <none>           <none>
+kruise-system        kruise-daemon-mnpmk                                                1/1     Running   0               4m14s   192.168.1.87    192.168.1.87    <none>           <none>
+kube-system          coredns-599b56fc64-hzb75                                           1/1     Running   0               6d23h   192.168.1.129   192.168.1.87    <none>           <none>
+kube-system          everest-csi-controller-67d96445fc-wt9gb                            1/1     Running   0               7d      192.168.1.173   192.168.1.87    <none>           <none>
+kube-system          everest-csi-driver-n8ttd                                           1/1     Running   0               4m14s   192.168.1.87    192.168.1.87    <none>           <none>
+kube-system          icagent-56vmj                                                      1/1     Running   0               4m14s   192.168.1.87    192.168.1.87    <none>           <none>
+```
+
+## Pending错误
+直接k describe svc xxx  
+```
+Events:
+  Type     Reason                    Age                  From                Message
+  ----     ------                    ----                 ----                -------
+  Normal   LoadbalancerIP            3m                   service-controller  -> 192.168.0.147
+  Normal   EnsuringLoadBalancer      34s (x6 over 3m)     service-controller  Ensuring load balancer
+  Warning  CreateLoadBalancerFailed  34s (x6 over 3m)     hws-cloudprovider   Details: Create loadbalancer(192.168.0.147) error: session affinity type:off not support
+  Warning  UpdateLoadBalancerFailed  34s (x6 over 3m)     hws-cloudprovider   Details: Update loadbalancer(192.168.0.147) error: session affinity type:off not support
+  Warning  SyncLoadBalancerFailed    34s (x6 over 3m)     service-controller  Error syncing load balancer: failed to ensure load balancer: session affinity type:off not support
+  Warning  UpdateLoadBalancerFailed  21s (x2 over 2m59s)  hws-cloudprovider   error update loadBalancer
+```
+
+union错误:  
+```text
+ Warning  UpdateLoadBalancerFailed  11s (x4 over 25s)  hws-cloudprovider   Details: Update member of listener/pool(53e79f61-253b-4e90-b98e-f61d12fee25f/e6aab5d6-3984-4bcf-83ba-6a54b44aba26) error: Failed to create member : {"error":{"message":"Vpc aacb184e-ba7e-4046-bb33-ccac42c30164 of member's subnet_cidr 8459a9bc-180d-403e-a622-d489e74c7c5b and vpc 427d9606-bfae-4508-95ea-9ff4e6804478 of loadbalancer debd5c46-9ce5-44fc-ba07-4e911ad1ae36 mismatch","code":"ELB.9899"}}, status code: 400
+```

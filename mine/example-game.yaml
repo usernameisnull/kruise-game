@@ -1,0 +1,17 @@
+---
+# 这里没有任何网络插件的信息
+apiVersion: game.kruise.io/v1alpha1
+kind: GameServerSet
+metadata:
+  name: minecraft
+  namespace: kruise-game-system
+spec:
+  replicas: 3
+  updateStrategy:
+    rollingUpdate:
+      podUpdatePolicy: InPlaceIfPossible
+  gameServerTemplate:
+    spec:
+      containers:
+        - image: registry.cn-hangzhou.aliyuncs.com/acs/minecraft-demo:1.12.2
+          name: minecraft

@@ -2,10 +2,16 @@
 ```
 tansj
 pengchengbo30036525
-T%7WJ8DRdKYMq4sQ6mC5
+j5rrThRS8PUHr2%@@_9u
 ```
 ## 企业项目
 E022-彭成博-4W
 
-## ELB id
-8f4cf216-a659-40dc-8c77-6068b036ba56
+## ELB
+id: 8f4cf216-a659-40dc-8c77-6068b036ba56
+ip地址: 189.1.225.136
+
+## 绑定k8s worker node的EIP
+节点1: 159.138.54.250
+节点2:  119.13.76.248, 密码: Mabing@123
+
