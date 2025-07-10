@@ -48,106 +48,79 @@ const (
 	ExternalTrafficPolicyTypeConfigName = "ExternalTrafficPolicyType"
 	PublishNotReadyAddressesConfigName  = "PublishNotReadyAddresses"
 
-	ElbIdAnnotationKey = "kubernetes.io/elb.id"
-	ElbIdsConfigName   = "ElbIds"
+	ElbClassAnnotationKey        = "kubernetes.io/elb.class"
+	ElbClassConfigName           = "ElbClass"
+	ElbIdAnnotationKey           = "kubernetes.io/elb.id"
+	ElbIdsConfigName             = "ElbIds"
+	ElbAutocreateAnnotationKey   = "kubernetes.io/elb.autocreate"
+	ElbEnterpriseIDAnnotationKey = "kubernetes.io/elb.enterpriseID"
+	ElbSubnetAnnotationKey       = "kubernetes.io/elb.subnet-id"
+	ElbSubnetConfigName          = "ElbSubnetId"
+	ElbLbAlgorithmAnnotationKey  = "kubernetes.io/elb.lb-algorithm"
+	ElbLbAlgorithmConfigName     = "ElbLbAlgorithm"
 
-	ElbClassAnnotationKey = "kubernetes.io/elb.class"
-	ElbClassConfigName    = "ElbClass"
-
-	ElbSubnetAnnotationKey = "kubernetes.io/elb.subnet-id"
-	ElbSubnetConfigName    = "ElbSubnetId"
-
-	ElbEipAnnotationKey = "kubernetes.io/elb.eip-id"
-	ElbEipConfigName    = "ElbEipId"
-
-	ElbEipKeepAnnotationKey = "kubernetes.io/elb.keep-eip"
-	ElbEipKeepConfigName    = "ElbKeepd"
-
-	ElbEipAutoCreateOptionAnnotationKey = "kubernetes.io/elb.eip-auto-create-option"
-	ElbEipAutoCreateOptionConfigName    = "ElbEipAutoCreateOption"
-
-	ElbLbAlgorithmAnnotationKey = "kubernetes.io/elb.lb-algorithm"
-	ElbLbAlgorithmConfigName    = "ElbLbAlgorithm"
-
-	ElbSessionAffinityFlagAnnotationKey = "kubernetes.io/elb.session-affinity-flag"
-	ElbSessionAffinityFlagConfigName    = "ElbSessionAffinityFlag"
-
+	ElbSessionAffinityModeAnnotationKey   = "kubernetes.io/elb.session-affinity-mode"
+	ElbSessionAffinityModeConfigName      = "ElbSessionAffinityFlag"
 	ElbSessionAffinityOptionAnnotationKey = "kubernetes.io/elb.session-affinity-option"
 	ElbSessionAffinityOptionConfigName    = "ElbSessionAffinityOption"
 
-	ElbTransparentClientIPAnnotationKey = "kubernetes.io/elb.enable-transparent-client-ip"
-	ElbTransparentClientIPConfigName    = "ElbTransparentClientIP"
-
-	ElbXForwardedHostAnnotationKey = "kubernetes.io/elb.x-forwarded-host"
-	ElbXForwardedHostConfigName    = "ElbXForwardedHost"
-
-	ElbTlsRefAnnotationKey = "kubernetes.io/elb.default-tls-container-ref"
-	ElbTlsRefConfigName    = "ElbTlsRef"
-
-	ElbIdleTimeoutAnnotationKey = "kubernetes.io/elb.idle-timeout"
-	ElbIdleTimeoutConfigName    = "ElbIdleTimeout"
-
-	ElbRequestTimeoutAnnotationKey = "kubernetes.io/elb.request-timeout"
-	ElbRequestTimeoutConfigName    = "ElbRequestTimeout"
-	// TODO: remove
-	ElbResponseTimeoutAnnotationKey = "kubernetes.io/elb.response-timeout"
-	ElbResponseTimeoutConfigName    = "ElbResponseTimeout"
-
-	ElbEnableCrossVPCAnnotationKey = "kubernetes.io/elb.enable-cross-vpc"
-	ElbEnableCrossVPCConfigName    = "ElbEnableCrossVPC"
-
-	ElbL4FlavorIDAnnotationKey = "kubernetes.io/elb.l4-flavor-id"
-	ElbL4FlavorIDConfigName    = "ElbL4FlavorID"
-
-	ElbL7FlavorIDAnnotationKey = "kubernetes.io/elb.l7-flavor-id"
-	ElbL7FlavorIDConfigName    = "ElbL7FlavorID"
-
-	LBHealthCheckSwitchAnnotationKey = "kubernetes.io/elb.health-check-flag"
-	LBHealthCheckSwitchConfigName    = "LBHealthCheckFlag"
-
-	LBHealthCheckOptionAnnotationKey = "kubernetes.io/elb.health-check-option"
-
+	LBHealthCheckSwitchAnnotationKey  = "kubernetes.io/elb.health-check-flag"
+	LBHealthCheckSwitchConfigName     = "LBHealthCheckFlag"
+	LBHealthCheckOptionAnnotationKey  = "kubernetes.io/elb.health-check-option"
+	LBHealthCHeckOptionConfigName     = "LBHealthCheckOption"
 	LBHealthCheckOptionsAnnotationKey = "kubernetes.io/elb.health-check-options"
+	LBHealthCHeckOptionsConfigName    = "LBHealthCheckOptions"
 
-	LBHealthCHeckOptionConfigName  = "LBHealthCheckOption"
-	LBHealthCHeckOptionsConfigName = "LBHealthCheckOptions"
+	ElbProtocolPortAnnotationKey = "kubernetes.io/elb.protocol-port"
+	ElbCertIdAnnotationKey       = "kubernetes.io/elb.cert-id"
 
-	ElbAutocreateAnnotationKey = "kubernetes.io/elb.autocreate"
+	ElbTlsCertificateIdsAnnotationKey = "kubernetes.io/elb.tls-certificate-ids"
 
-	ElbEnterpriseIDAnnotationKey = "kubernetes.io/elb.enterpriseID"
+	ElbAdaptiveWeightAnnotationKey = "kubernetes.io/elb.adaptive-weight"
 
-	ElbSessionAffinityModeAnnotationKey = "kubernetes.io/elb.session-affinity-mode"
-
-	ElbProtocolPortAnnotationKey                      = "kubernetes.io/elb.protocol-port"
-	ElbCertIdAnnotationKey                            = "kubernetes.io/elb.cert-id"
-	ElbCertIdsAnnotationKey                           = "kubernetes.io/elb.cert-ids"
-	ElbAdaptiveWeightAnnotationKey                    = "kubernetes.io/elb.adaptive-weight"
 	ElbMulticlusterAnnotationKey                      = "kubernetes.io/elb.multicluster"
 	ElbMultivpcAnnotationKey                          = "kubernetes.io/elb.multivpc"
 	ElbMulticlusterLoadbalancerWeightAnnotationKey    = "kubernetes.io/elb.multicluster-loadbalancer-weight"
 	ElbMulticlusterResourceRecyclePolicyAnnotationKey = "kubernetes.io/elb.multicluster-resource-recycle-policy"
-	ElbPassThroughAnnotationKey                       = "kubernetes.io/elb.pass-through"
-	ElbAclIdAnnotationKey                             = "kubernetes.io/elb.acl-id"
-	ElbAclStatusAnnotationKey                         = "kubernetes.io/elb.acl-status"
-	ElbAclTypeAnnotationKey                           = "kubernetes.io/elb.acl-type"
-	ElbHwsNetworkTypeAnnotationKey                    = "kubernetes.io/hws-hostNetwork"
-	ElbKeepaliveTimeoutAnnotationKey                  = "kubernetes.io/elb.keepalive_timeout"
-	ElbClientTimeoutAnnotationKey                     = "kubernetes.io/elb.client_timeout"
-	ElbMemberTimeoutAnnotationKey                     = "kubernetes.io/elb.member_timeout"
-	ElbTagsAnnotationKey                              = "kubernetes.io/elb.tags"
-	ElbHttp2EnableAnnotationKey                       = "kubernetes.io/elb.http2-enable"
-	ElbXForwardPortAnnotationKey                      = "kubernetes.io/elb.x-forwarded-port"
-	ElbXForwardForPortAnnotationKey                   = "kubernetes.io/elb.x-forwarded-for-port"
-	ElbXForwardHostAnnotationKey                      = "kubernetes.io/elb.x-forwarded-host"
-	ElbXRealIpAnnotationKey                           = "kubernetes.io/elb.x-real-ip"
-	ElbGzipEnabledAnnotationKey                       = "kubernetes.io/elb.gzip-enabled"
-	ElbTlsCertificateIdsAnnotationKey                 = "kubernetes.io/elb.tls-certificate-ids"
-	ElbConnectionDrainEnabledAnnotationKey            = "kubernetes.io/elb.connection-drain-enable"
-	ElbConnectionDrainTimeoutAnnotationKey            = "kubernetes.io/elb.connection-drain-timeout"
-	ElbTransparentClientIpAnnotationKey               = "kubernetes.io/elb.transparent-client-ip"
-	ElbCustomEipIdAnnotationKey                       = "kubernetes.io/elb.custom-eip-id"
-	ElbPortRangesAnnotationKey                        = "kubernetes.io/elb.port-ranges"
-	ElbIpTargetEnabledAnnotationKey                   = "kubernetes.io/elb.ip-target-enabled"
+
+	ElbPassThroughAnnotationKey = "kubernetes.io/elb.pass-through"
+
+	ElbAclIdAnnotationKey     = "kubernetes.io/elb.acl-id"
+	ElbAclStatusAnnotationKey = "kubernetes.io/elb.acl-status"
+	ElbAclTypeAnnotationKey   = "kubernetes.io/elb.acl-type"
+
+	ElbHwsNetworkTypeAnnotationKey = "kubernetes.io/hws-hostNetwork"
+
+	ElbKeepaliveTimeoutAnnotationKey = "kubernetes.io/elb.keepalive_timeout"
+	ElbClientTimeoutAnnotationKey    = "kubernetes.io/elb.client_timeout"
+	ElbMemberTimeoutAnnotationKey    = "kubernetes.io/elb.member_timeout"
+
+	ElbTransparentClientIPConfigName = "ElbTransparentClientIP"
+
+	ElbXForwardedHostAnnotationKey = "kubernetes.io/elb.x-forwarded-host"
+	ElbXForwardedHostConfigName    = "ElbXForwardedHost"
+
+	ElbTagsAnnotationKey = "kubernetes.io/elb.tags"
+
+	ElbHttp2EnableAnnotationKey = "kubernetes.io/elb.http2-enable"
+
+	ElbXForwardPortAnnotationKey    = "kubernetes.io/elb.x-forwarded-port"
+	ElbXForwardForPortAnnotationKey = "kubernetes.io/elb.x-forwarded-for-port"
+	ElbXForwardHostAnnotationKey    = "kubernetes.io/elb.x-forwarded-host"
+	ElbXRealIpAnnotationKey         = "kubernetes.io/elb.x-real-ip"
+
+	ElbGzipEnabledAnnotationKey = "kubernetes.io/elb.gzip-enabled"
+
+	ElbConnectionDrainEnabledAnnotationKey = "kubernetes.io/elb.connection-drain-enable"
+	ElbConnectionDrainTimeoutAnnotationKey = "kubernetes.io/elb.connection-drain-timeout"
+
+	ElbTransparentClientIPAnnotationKey = "kubernetes.io/elb.transparent-client-ip"
+
+	ElbCustomEipIdAnnotationKey = "kubernetes.io/elb.custom-eip-id"
+
+	ElbPortRangesAnnotationKey = "kubernetes.io/elb.port-ranges"
+
+	ElbIpTargetEnabledAnnotationKey = "kubernetes.io/elb.ip-target-enabled"
 )
 
 const (
@@ -595,7 +568,7 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 			if strings.EqualFold(c.Value, ElbLbAlgorithmLeastConn) || strings.EqualFold(c.Value, ElbLbAlgorithmSourceIP) {
 				elbLbAlgorithm = c.Value
 			}
-		case ElbSessionAffinityFlagConfigName:
+		case ElbSessionAffinityModeConfigName:
 			if strings.EqualFold(c.Value, "on") || strings.EqualFold(c.Value, "off") {
 				elbSessionAffinityFlag = c.Value
 			}
@@ -620,43 +593,6 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 				continue
 			}
 			elbXForwardedHost = v
-		case ElbIdleTimeoutConfigName:
-			v, err := strconv.Atoi(c.Value)
-			if err != nil {
-				_ = fmt.Errorf("ignore invalid elb idle timeout value: %s", c.Value)
-				continue
-			}
-			if v >= 0 && v <= 4000 {
-				elbIdleTimeout = int32(v)
-			} else {
-				_ = fmt.Errorf("ignore invalid elb idle timeout value: %s", c.Value)
-				continue
-			}
-		case ElbRequestTimeoutConfigName:
-			v, err := strconv.Atoi(c.Value)
-			if err != nil {
-				_ = fmt.Errorf("ignore invalid elb request timeout value: %s", c.Value)
-				continue
-			}
-			if v >= 1 && v <= 300 {
-				elbRequestTimeout = int32(v)
-			} else {
-				_ = fmt.Errorf("ignore invalid elb request timeout value: %s", c.Value)
-				continue
-			}
-
-		case ElbResponseTimeoutConfigName:
-			v, err := strconv.Atoi(c.Value)
-			if err != nil {
-				_ = fmt.Errorf("ignore invalid elb response timeout value: %s", c.Value)
-				continue
-			}
-			if v >= 1 && v <= 300 {
-				elbResponseTimeout = int32(v)
-			} else {
-				_ = fmt.Errorf("ignore invalid elb response timeout value: %s", c.Value)
-				continue
-			}
 		case LBHealthCheckSwitchConfigName:
 			//TODO: allow uppercase?
 			checkSwitch := strings.ToLower(c.Value)
@@ -761,7 +697,7 @@ func (s *ElbPlugin) consSvc(sc *elbConfig, pod *corev1.Pod, c client.Client, ctx
 		ElbConfigHashKey:                      util.GetHash(sc),
 		ElbClassAnnotationKey:                 sc.elbClass,
 		ElbLbAlgorithmAnnotationKey:           sc.elbLbAlgorithm,
-		ElbSessionAffinityFlagAnnotationKey:   sc.elbSessionAffinityFlag,
+		ElbSessionAffinityModeAnnotationKey:   sc.elbSessionAffinityFlag,
 		ElbSessionAffinityOptionAnnotationKey: sc.elbSessionAffinityOption,
 		ElbTransparentClientIPAnnotationKey:   strconv.FormatBool(sc.elbTransparentClientIP),
 		LBHealthCheckSwitchAnnotationKey:      sc.lBHealthCheckSwitch,
@@ -770,18 +706,6 @@ func (s *ElbPlugin) consSvc(sc *elbConfig, pod *corev1.Pod, c client.Client, ctx
 	if sc.elbClass == ElbClassPerformance {
 		svcAnnotations[ElbXForwardedHostAnnotationKey] = strconv.FormatBool(sc.elbXForwardedHost)
 	}
-	if sc.elbIdleTimeout != -1 {
-		svcAnnotations[ElbIdleTimeoutAnnotationKey] = strconv.Itoa(int(sc.elbIdleTimeout))
-	}
-
-	if sc.elbRequestTimeout != -1 {
-		svcAnnotations[ElbRequestTimeoutAnnotationKey] = strconv.Itoa(int(sc.elbRequestTimeout))
-	}
-
-	if sc.elbResponseTimeout != -1 {
-		svcAnnotations[ElbResponseTimeoutAnnotationKey] = strconv.Itoa(int(sc.elbResponseTimeout))
-	}
-
 	// the case where both exist has already been handled in the parseLbConfig function.
 	// must have one, even it is empty.
 	if sc.lBHealthCheckSwitch == "on" {
