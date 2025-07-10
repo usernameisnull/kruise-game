@@ -33,6 +33,7 @@ import (
 	log "k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml"
 
 	gamekruiseiov1alpha1 "github.com/openkruise/kruise-game/apis/v1alpha1"
 	"github.com/openkruise/kruise-game/cloudprovider"
@@ -77,7 +78,6 @@ const (
 	ElbTransparentClientIPAnnotationKey = "kubernetes.io/elb.enable-transparent-client-ip"
 	ElbTransparentClientIPConfigName    = "ElbTransparentClientIP"
 
-	// only performance elb supports kubernetes.io/elb.x-forwarded-host"
 	ElbXForwardedHostAnnotationKey = "kubernetes.io/elb.x-forwarded-host"
 	ElbXForwardedHostConfigName    = "ElbXForwardedHost"
 
@@ -302,6 +302,8 @@ func (s *ElbPlugin) OnPodUpdated(c client.Client, pod *corev1.Pod, ctx context.C
 			if err != nil {
 				return pod, cperrors.ToPluginError(err, cperrors.ParameterError)
 			}
+			out, _ := yaml.Marshal(service)
+			fmt.Println("////", string(out))
 			return pod, cperrors.ToPluginError(c.Create(ctx, service), cperrors.ApiCallError)
 		}
 		return pod, cperrors.NewPluginError(cperrors.ApiCallError, err.Error())
@@ -586,24 +588,17 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 			}
 			publishNotReadyAddresses = v
 		case ElbClassConfigName:
-			if !strings.EqualFold(c.Value, ElbClassPerformance) && !strings.EqualFold(c.Value, ElbClassUnion) {
-				return nil, fmt.Errorf("invalid ElbClass value: %s, use '%s' or '%s'",
-					c.Value, ElbClassPerformance, ElbClassUnion)
+			if strings.EqualFold(c.Value, ElbClassPerformance) {
+				elbClass = ElbClassPerformance
 			}
-			elbClass = c.Value
 		case ElbLbAlgorithmConfigName:
-			if !strings.EqualFold(c.Value, ElbLbAlgorithmRoundRobin) &&
-				!strings.EqualFold(c.Value, ElbLbAlgorithmLeastConn) &&
-				!strings.EqualFold(c.Value, ElbLbAlgorithmSourceIP) {
-				return nil, fmt.Errorf("invalid ElbLbAlgorithm value: %s, use '%s' or '%s' or '%s'",
-					c.Value, ElbLbAlgorithmRoundRobin, ElbLbAlgorithmLeastConn, ElbLbAlgorithmSourceIP)
+			if strings.EqualFold(c.Value, ElbLbAlgorithmLeastConn) || strings.EqualFold(c.Value, ElbLbAlgorithmSourceIP) {
+				elbLbAlgorithm = c.Value
 			}
-			elbLbAlgorithm = c.Value
 		case ElbSessionAffinityFlagConfigName:
-			if !strings.EqualFold(c.Value, "on") && !strings.EqualFold(c.Value, "off") {
-				return nil, fmt.Errorf("invalid ElbSessionAffinityFlag value: %s, use 'on' or 'off'", c.Value)
+			if strings.EqualFold(c.Value, "on") || strings.EqualFold(c.Value, "off") {
+				elbSessionAffinityFlag = c.Value
 			}
-			elbSessionAffinityFlag = c.Value
 		case ElbSessionAffinityOptionConfigName:
 			if json.Valid([]byte(c.Value)) {
 				lBHealthCHeckOptionConfig = c.Value
@@ -769,10 +764,12 @@ func (s *ElbPlugin) consSvc(sc *elbConfig, pod *corev1.Pod, c client.Client, ctx
 		ElbSessionAffinityFlagAnnotationKey:   sc.elbSessionAffinityFlag,
 		ElbSessionAffinityOptionAnnotationKey: sc.elbSessionAffinityOption,
 		ElbTransparentClientIPAnnotationKey:   strconv.FormatBool(sc.elbTransparentClientIP),
-		ElbXForwardedHostAnnotationKey:        strconv.FormatBool(sc.elbXForwardedHost),
 		LBHealthCheckSwitchAnnotationKey:      sc.lBHealthCheckSwitch,
 	}
-
+	// only performance elb supports kubernetes.io/elb.x-forwarded-host, even set to false
+	if sc.elbClass == ElbClassPerformance {
+		svcAnnotations[ElbXForwardedHostAnnotationKey] = strconv.FormatBool(sc.elbXForwardedHost)
+	}
 	if sc.elbIdleTimeout != -1 {
 		svcAnnotations[ElbIdleTimeoutAnnotationKey] = strconv.Itoa(int(sc.elbIdleTimeout))
 	}
@@ -785,10 +782,11 @@ func (s *ElbPlugin) consSvc(sc *elbConfig, pod *corev1.Pod, c client.Client, ctx
 		svcAnnotations[ElbResponseTimeoutAnnotationKey] = strconv.Itoa(int(sc.elbResponseTimeout))
 	}
 
+	// the case where both exist has already been handled in the parseLbConfig function.
+	// must have one, even it is empty.
 	if sc.lBHealthCheckSwitch == "on" {
-		if sc.lBHealthCheckOption != "" {
-			svcAnnotations[LBHealthCheckOptionAnnotationKey] = sc.lBHealthCheckOption
-		}
+		svcAnnotations[LBHealthCheckOptionAnnotationKey] = sc.lBHealthCheckOption
+
 		if sc.lBHealthCheckOptions != "" {
 			svcAnnotations[LBHealthCheckOptionsAnnotationKey] = sc.lBHealthCheckOptions
 		}
