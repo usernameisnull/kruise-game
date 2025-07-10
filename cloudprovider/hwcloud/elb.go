@@ -159,7 +159,7 @@ type elbConfig struct {
 	elbClass                 string
 	elbConnLimit             int32
 	elbLbAlgorithm           string
-	elbSessionAffinityFlag   string
+	elbSessionAffinityMode   string
 	elbSessionAffinityOption string
 	elbTransparentClientIP   bool
 	elbXForwardedHost        bool
@@ -506,7 +506,7 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 	elbClass := ElbClassUnion
 	elbConnLimit := int32(-1)
 	elbLbAlgorithm := ElbLbAlgorithmRoundRobin
-	elbSessionAffinityFlag := "off"
+	elbSessionAffinityMode := ""
 	elbSessionAffinityOption := ""
 	elbTransparentClientIP := false
 	elbXForwardedHost := false
@@ -569,8 +569,8 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 				elbLbAlgorithm = c.Value
 			}
 		case ElbSessionAffinityModeConfigName:
-			if strings.EqualFold(c.Value, "on") || strings.EqualFold(c.Value, "off") {
-				elbSessionAffinityFlag = c.Value
+			if strings.EqualFold(c.Value, "SOURCE_IP") {
+				elbSessionAffinityMode = c.Value
 			}
 		case ElbSessionAffinityOptionConfigName:
 			if json.Valid([]byte(c.Value)) {
@@ -628,7 +628,7 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 		elbClass:                  elbClass,
 		elbConnLimit:              elbConnLimit,
 		elbLbAlgorithm:            elbLbAlgorithm,
-		elbSessionAffinityFlag:    elbSessionAffinityFlag,
+		elbSessionAffinityMode:    elbSessionAffinityMode,
 		elbSessionAffinityOption:  elbSessionAffinityOption,
 		elbTransparentClientIP:    elbTransparentClientIP,
 		elbXForwardedHost:         elbXForwardedHost,
@@ -697,10 +697,12 @@ func (s *ElbPlugin) consSvc(sc *elbConfig, pod *corev1.Pod, c client.Client, ctx
 		ElbConfigHashKey:                      util.GetHash(sc),
 		ElbClassAnnotationKey:                 sc.elbClass,
 		ElbLbAlgorithmAnnotationKey:           sc.elbLbAlgorithm,
-		ElbSessionAffinityModeAnnotationKey:   sc.elbSessionAffinityFlag,
 		ElbSessionAffinityOptionAnnotationKey: sc.elbSessionAffinityOption,
 		ElbTransparentClientIPAnnotationKey:   strconv.FormatBool(sc.elbTransparentClientIP),
 		LBHealthCheckSwitchAnnotationKey:      sc.lBHealthCheckSwitch,
+	}
+	if sc.elbSessionAffinityMode == "SOURCE_IP" {
+		svcAnnotations[ElbSessionAffinityModeAnnotationKey] = "SOURCE_IP"
 	}
 	// only performance elb supports kubernetes.io/elb.x-forwarded-host, even set to false
 	if sc.elbClass == ElbClassPerformance {
