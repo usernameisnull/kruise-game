@@ -392,7 +392,6 @@ func init() {
 }
 
 func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, error) {
-	var lbIds []string
 	res := &elbConfig{
 		targetPorts:               make([]int, 0),
 		protocols:                 make([]corev1.Protocol, 0),
@@ -403,18 +402,12 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 	}
 	for _, c := range conf {
 		switch c.Name {
+		// huawei only supports one elb id
 		case "kubernetes.io/elb.id":
-			// TODO: support multiple elb?
-			for _, slbId := range strings.Split(c.Value, ",") {
-				if slbId != "" {
-					lbIds = append(lbIds, slbId)
-				}
-			}
-
-			if len(lbIds) <= 0 {
+			if c.Value == "" {
 				return nil, fmt.Errorf("no elb id found, must specify at least one elb id")
 			}
-			res.lbIds = lbIds
+			res.lbIds = []string{c.Value}
 			res.hwOptions[c.Name] = c.Value
 		case PortProtocolsConfigName:
 			for _, pp := range strings.Split(c.Value, ",") {
@@ -471,9 +464,10 @@ func (s *ElbPlugin) consSvc(sc *elbConfig, pod *corev1.Pod, c client.Client, ctx
 		lbId = slbPorts[0]
 		ports = util.StringToInt32Slice(slbPorts[1], ",")
 	} else {
+		//TODO: 不兼容auto create模式?
 		lbId, ports = s.allocate(sc.lbIds, len(sc.targetPorts), podKey)
 		if lbId == "" && ports == nil {
-			return nil, fmt.Errorf("there are no avaialable ports for %v", sc.lbIds)
+			return nil, fmt.Errorf("there are no avaliable ports for %v", sc.lbIds)
 		}
 	}
 
