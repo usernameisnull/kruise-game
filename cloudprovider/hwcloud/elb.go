@@ -18,13 +18,17 @@ package hwcloud
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 	"sync"
 
-	"github.com/pkg/errors"
+	gamekruiseiov1alpha1 "github.com/openkruise/kruise-game/apis/v1alpha1"
+	"github.com/openkruise/kruise-game/cloudprovider"
+	cperrors "github.com/openkruise/kruise-game/cloudprovider/errors"
+	provideroptions "github.com/openkruise/kruise-game/cloudprovider/options"
+	"github.com/openkruise/kruise-game/cloudprovider/utils"
+	"github.com/openkruise/kruise-game/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,14 +37,6 @@ import (
 	log "k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/yaml"
-
-	gamekruiseiov1alpha1 "github.com/openkruise/kruise-game/apis/v1alpha1"
-	"github.com/openkruise/kruise-game/cloudprovider"
-	cperrors "github.com/openkruise/kruise-game/cloudprovider/errors"
-	provideroptions "github.com/openkruise/kruise-game/cloudprovider/options"
-	"github.com/openkruise/kruise-game/cloudprovider/utils"
-	"github.com/openkruise/kruise-game/pkg/util"
 )
 
 const (
@@ -48,95 +44,14 @@ const (
 	ExternalTrafficPolicyTypeConfigName = "ExternalTrafficPolicyType"
 	PublishNotReadyAddressesConfigName  = "PublishNotReadyAddresses"
 
-	ElbClassAnnotationKey        = "kubernetes.io/elb.class"
-	ElbClassConfigName           = "ElbClass"
-	ElbIdAnnotationKey           = "kubernetes.io/elb.id"
-	ElbIdsConfigName             = "ElbIds"
-	ElbAutocreateAnnotationKey   = "kubernetes.io/elb.autocreate"
-	ElbEnterpriseIDAnnotationKey = "kubernetes.io/elb.enterpriseID"
-	ElbSubnetAnnotationKey       = "kubernetes.io/elb.subnet-id"
-	ElbSubnetConfigName          = "ElbSubnetId"
-	ElbLbAlgorithmAnnotationKey  = "kubernetes.io/elb.lb-algorithm"
-	ElbLbAlgorithmConfigName     = "ElbLbAlgorithm"
+	ElbIdAnnotationKey                 = "kubernetes.io/elb.id"
+	ElbConfigHashKey                   = "game.kruise.io/network-config-hash"
+	SvcSelectorKey                     = "statefulset.kubernetes.io/pod-name"
+	ProtocolTCPUDP     corev1.Protocol = "TCPUDP"
+	FixedConfigName                    = "Fixed"
 
-	ElbSessionAffinityModeAnnotationKey   = "kubernetes.io/elb.session-affinity-mode"
-	ElbSessionAffinityModeConfigName      = "ElbSessionAffinityFlag"
-	ElbSessionAffinityOptionAnnotationKey = "kubernetes.io/elb.session-affinity-option"
-	ElbSessionAffinityOptionConfigName    = "ElbSessionAffinityOption"
-
-	LBHealthCheckSwitchAnnotationKey  = "kubernetes.io/elb.health-check-flag"
-	LBHealthCheckSwitchConfigName     = "LBHealthCheckFlag"
-	LBHealthCheckOptionAnnotationKey  = "kubernetes.io/elb.health-check-option"
-	LBHealthCHeckOptionConfigName     = "LBHealthCheckOption"
-	LBHealthCheckOptionsAnnotationKey = "kubernetes.io/elb.health-check-options"
-	LBHealthCHeckOptionsConfigName    = "LBHealthCheckOptions"
-
-	ElbProtocolPortAnnotationKey = "kubernetes.io/elb.protocol-port"
-	ElbCertIdAnnotationKey       = "kubernetes.io/elb.cert-id"
-
-	ElbTlsCertificateIdsAnnotationKey = "kubernetes.io/elb.tls-certificate-ids"
-
-	ElbAdaptiveWeightAnnotationKey = "kubernetes.io/elb.adaptive-weight"
-
-	ElbMulticlusterAnnotationKey                      = "kubernetes.io/elb.multicluster"
-	ElbMultivpcAnnotationKey                          = "kubernetes.io/elb.multivpc"
-	ElbMulticlusterLoadbalancerWeightAnnotationKey    = "kubernetes.io/elb.multicluster-loadbalancer-weight"
-	ElbMulticlusterResourceRecyclePolicyAnnotationKey = "kubernetes.io/elb.multicluster-resource-recycle-policy"
-
-	ElbPassThroughAnnotationKey = "kubernetes.io/elb.pass-through"
-
-	ElbAclIdAnnotationKey     = "kubernetes.io/elb.acl-id"
-	ElbAclStatusAnnotationKey = "kubernetes.io/elb.acl-status"
-	ElbAclTypeAnnotationKey   = "kubernetes.io/elb.acl-type"
-
-	ElbHwsNetworkTypeAnnotationKey = "kubernetes.io/hws-hostNetwork"
-
-	ElbKeepaliveTimeoutAnnotationKey = "kubernetes.io/elb.keepalive_timeout"
-	ElbClientTimeoutAnnotationKey    = "kubernetes.io/elb.client_timeout"
-	ElbMemberTimeoutAnnotationKey    = "kubernetes.io/elb.member_timeout"
-
-	ElbTransparentClientIPConfigName = "ElbTransparentClientIP"
-
-	ElbXForwardedHostAnnotationKey = "kubernetes.io/elb.x-forwarded-host"
-	ElbXForwardedHostConfigName    = "ElbXForwardedHost"
-
-	ElbTagsAnnotationKey = "kubernetes.io/elb.tags"
-
-	ElbHttp2EnableAnnotationKey = "kubernetes.io/elb.http2-enable"
-
-	ElbXForwardPortAnnotationKey    = "kubernetes.io/elb.x-forwarded-port"
-	ElbXForwardForPortAnnotationKey = "kubernetes.io/elb.x-forwarded-for-port"
-	ElbXForwardHostAnnotationKey    = "kubernetes.io/elb.x-forwarded-host"
-	ElbXRealIpAnnotationKey         = "kubernetes.io/elb.x-real-ip"
-
-	ElbGzipEnabledAnnotationKey = "kubernetes.io/elb.gzip-enabled"
-
-	ElbConnectionDrainEnabledAnnotationKey = "kubernetes.io/elb.connection-drain-enable"
-	ElbConnectionDrainTimeoutAnnotationKey = "kubernetes.io/elb.connection-drain-timeout"
-
-	ElbTransparentClientIPAnnotationKey = "kubernetes.io/elb.transparent-client-ip"
-
-	ElbCustomEipIdAnnotationKey = "kubernetes.io/elb.custom-eip-id"
-
-	ElbPortRangesAnnotationKey = "kubernetes.io/elb.port-ranges"
-
-	ElbIpTargetEnabledAnnotationKey = "kubernetes.io/elb.ip-target-enabled"
-)
-
-const (
-	ElbConfigHashKey                 = "game.kruise.io/network-config-hash"
-	SvcSelectorKey                   = "statefulset.kubernetes.io/pod-name"
-	ProtocolTCPUDP   corev1.Protocol = "TCPUDP"
-	FixedConfigName                  = "Fixed"
-
-	ElbNetwork          = "HwCloud-ELB"
-	AliasELB            = "ELB-Network"
-	ElbClassPerformance = "performance"
-	ElbClassUnion       = "union"
-
-	ElbLbAlgorithmRoundRobin = "ROUND_ROBIN"
-	ElbLbAlgorithmLeastConn  = "LEAST_CONNECTIONS"
-	ElbLbAlgorithmSourceIP   = "SOURCE_IP"
+	ElbNetwork = "HwCloud-ELB"
+	AliasELB   = "ELB-Network"
 )
 
 type portAllocated map[int32]bool
@@ -151,28 +66,13 @@ type ElbPlugin struct {
 }
 
 type elbConfig struct {
-	lbIds       []string
-	targetPorts []int
-	protocols   []corev1.Protocol
-	isFixed     bool
-
-	elbClass                 string
-	elbConnLimit             int32
-	elbLbAlgorithm           string
-	elbSessionAffinityMode   string
-	elbSessionAffinityOption string
-	elbTransparentClientIP   bool
-	elbXForwardedHost        bool
-	elbIdleTimeout           int32
-	elbRequestTimeout        int32
-	elbResponseTimeout       int32
-
+	lbIds                     []string
+	targetPorts               []int
+	protocols                 []corev1.Protocol
+	isFixed                   bool
 	externalTrafficPolicyType corev1.ServiceExternalTrafficPolicyType
 	publishNotReadyAddresses  bool
-
-	lBHealthCheckSwitch  string
-	lBHealthCheckOption  string
-	lBHealthCheckOptions string
+	hwOptions                 map[string]string
 }
 
 func (s *ElbPlugin) Name() string {
@@ -275,8 +175,6 @@ func (s *ElbPlugin) OnPodUpdated(c client.Client, pod *corev1.Pod, ctx context.C
 			if err != nil {
 				return pod, cperrors.ToPluginError(err, cperrors.ParameterError)
 			}
-			out, _ := yaml.Marshal(service)
-			fmt.Println("////", string(out))
 			return pod, cperrors.ToPluginError(c.Create(ctx, service), cperrors.ApiCallError)
 		}
 		return pod, cperrors.NewPluginError(cperrors.ApiCallError, err.Error())
@@ -495,32 +393,18 @@ func init() {
 
 func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, error) {
 	var lbIds []string
-	ports := make([]int, 0)
-	protocols := make([]corev1.Protocol, 0)
-	isFixed := false
-
-	externalTrafficPolicy := corev1.ServiceExternalTrafficPolicyTypeCluster
-	publishNotReadyAddresses := false
-	// https://support.huaweicloud.com/usermanual-cce/cce_10_0385.html#section1
-	// The default value is "union".
-	elbClass := ElbClassUnion
-	elbConnLimit := int32(-1)
-	elbLbAlgorithm := ElbLbAlgorithmRoundRobin
-	elbSessionAffinityMode := ""
-	elbSessionAffinityOption := ""
-	elbTransparentClientIP := false
-	elbXForwardedHost := false
-	elbIdleTimeout := int32(-1)
-	elbRequestTimeout := int32(-1)
-	elbResponseTimeout := int32(-1)
-
-	lBHealthCheckSwitch := "on"
-	lBHealthCHeckOptionConfig := ""
-	lBHealthCHeckOptionsConfig := ""
-
+	res := &elbConfig{
+		targetPorts:               make([]int, 0),
+		protocols:                 make([]corev1.Protocol, 0),
+		isFixed:                   false,
+		externalTrafficPolicyType: corev1.ServiceExternalTrafficPolicyTypeCluster,
+		publishNotReadyAddresses:  false,
+		hwOptions:                 make(map[string]string),
+	}
 	for _, c := range conf {
 		switch c.Name {
-		case ElbIdsConfigName:
+		case "kubernetes.io/elb.id":
+			// TODO: support multiple elb?
 			for _, slbId := range strings.Split(c.Value, ",") {
 				if slbId != "" {
 					lbIds = append(lbIds, slbId)
@@ -530,6 +414,8 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 			if len(lbIds) <= 0 {
 				return nil, fmt.Errorf("no elb id found, must specify at least one elb id")
 			}
+			res.lbIds = lbIds
+			res.hwOptions[c.Name] = c.Value
 		case PortProtocolsConfigName:
 			for _, pp := range strings.Split(c.Value, ",") {
 				ppSlice := strings.Split(pp, "/")
@@ -537,11 +423,11 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 				if err != nil {
 					continue
 				}
-				ports = append(ports, port)
+				res.targetPorts = append(res.targetPorts, port)
 				if len(ppSlice) != 2 {
-					protocols = append(protocols, corev1.ProtocolTCP)
+					res.protocols = append(res.protocols, corev1.ProtocolTCP)
 				} else {
-					protocols = append(protocols, corev1.Protocol(ppSlice[1]))
+					res.protocols = append(res.protocols, corev1.Protocol(ppSlice[1]))
 				}
 			}
 		case FixedConfigName:
@@ -549,96 +435,22 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 			if err != nil {
 				continue
 			}
-			isFixed = v
+			res.isFixed = v
 		case ExternalTrafficPolicyTypeConfigName:
 			if strings.EqualFold(c.Value, string(corev1.ServiceExternalTrafficPolicyTypeLocal)) {
-				externalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
+				res.externalTrafficPolicyType = corev1.ServiceExternalTrafficPolicyTypeLocal
 			}
 		case PublishNotReadyAddressesConfigName:
 			v, err := strconv.ParseBool(c.Value)
 			if err != nil {
 				continue
 			}
-			publishNotReadyAddresses = v
-		case ElbClassConfigName:
-			if strings.EqualFold(c.Value, ElbClassPerformance) {
-				elbClass = ElbClassPerformance
-			}
-		case ElbLbAlgorithmConfigName:
-			if strings.EqualFold(c.Value, ElbLbAlgorithmLeastConn) || strings.EqualFold(c.Value, ElbLbAlgorithmSourceIP) {
-				elbLbAlgorithm = c.Value
-			}
-		case ElbSessionAffinityModeConfigName:
-			if strings.EqualFold(c.Value, "SOURCE_IP") {
-				elbSessionAffinityMode = c.Value
-			}
-		case ElbSessionAffinityOptionConfigName:
-			if json.Valid([]byte(c.Value)) {
-				lBHealthCHeckOptionConfig = c.Value
-			} else {
-				return nil, fmt.Errorf("invalid elb session affinity option value: %s", c.Value)
-			}
-			elbSessionAffinityOption = c.Value
-		case ElbTransparentClientIPConfigName:
-			v, err := strconv.ParseBool(c.Value)
-			if err != nil {
-				_ = fmt.Errorf("ignore invalid elb transparent client ip value: %s", c.Value)
-				continue
-			}
-			elbTransparentClientIP = v
-		case ElbXForwardedHostConfigName:
-			v, err := strconv.ParseBool(c.Value)
-			if err != nil {
-				_ = fmt.Errorf("ignore invalid elb x forwarded host value: %s", c.Value)
-				continue
-			}
-			elbXForwardedHost = v
-		case LBHealthCheckSwitchConfigName:
-			//TODO: allow uppercase?
-			checkSwitch := strings.ToLower(c.Value)
-			if checkSwitch != "on" && checkSwitch != "off" {
-				return nil, fmt.Errorf("invalid lb health check switch value: %s", c.Value)
-			}
-			lBHealthCheckSwitch = checkSwitch
-		case LBHealthCHeckOptionConfigName:
-			if json.Valid([]byte(c.Value)) {
-				lBHealthCHeckOptionConfig = c.Value
-			} else {
-				return nil, fmt.Errorf("invalid LBHealthCheckOption value: %s", c.Value)
-			}
-		case LBHealthCHeckOptionsConfigName:
-			if json.Valid([]byte(c.Value)) {
-				lBHealthCHeckOptionsConfig = c.Value
-			} else {
-				return nil, fmt.Errorf("invalid LBHealthCheckOptions value: %s", c.Value)
-			}
+			res.publishNotReadyAddresses = v
+		default:
+			res.hwOptions[c.Name] = c.Value
 		}
 	}
-	// https://support.huaweicloud.com/usermanual-cce/cce_10_0385.html#section3
-	if LBHealthCheckSwitchConfigName == "on" && lBHealthCHeckOptionsConfig != "" && lBHealthCHeckOptionConfig != "" {
-		return nil, errors.New("LBHealthCheckOptions and LBHealthCheckOption cannot be set simultaneously.")
-	}
-	return &elbConfig{
-		lbIds:                     lbIds,
-		protocols:                 protocols,
-		targetPorts:               ports,
-		isFixed:                   isFixed,
-		externalTrafficPolicyType: externalTrafficPolicy,
-		publishNotReadyAddresses:  publishNotReadyAddresses,
-		elbClass:                  elbClass,
-		elbConnLimit:              elbConnLimit,
-		elbLbAlgorithm:            elbLbAlgorithm,
-		elbSessionAffinityMode:    elbSessionAffinityMode,
-		elbSessionAffinityOption:  elbSessionAffinityOption,
-		elbTransparentClientIP:    elbTransparentClientIP,
-		elbXForwardedHost:         elbXForwardedHost,
-		elbIdleTimeout:            elbIdleTimeout,
-		elbRequestTimeout:         elbRequestTimeout,
-		elbResponseTimeout:        elbResponseTimeout,
-		lBHealthCheckSwitch:       lBHealthCheckSwitch,
-		lBHealthCheckOption:       lBHealthCHeckOptionConfig,
-		lBHealthCheckOptions:      lBHealthCHeckOptionsConfig,
-	}, nil
+	return res, nil
 }
 
 func getPorts(ports []corev1.ServicePort) []int32 {
@@ -691,33 +503,12 @@ func (s *ElbPlugin) consSvc(sc *elbConfig, pod *corev1.Pod, c client.Client, ctx
 			})
 		}
 	}
-
-	svcAnnotations := map[string]string{
-		ElbIdAnnotationKey:                    lbId,
-		ElbConfigHashKey:                      util.GetHash(sc),
-		ElbClassAnnotationKey:                 sc.elbClass,
-		ElbLbAlgorithmAnnotationKey:           sc.elbLbAlgorithm,
-		ElbSessionAffinityOptionAnnotationKey: sc.elbSessionAffinityOption,
-		ElbTransparentClientIPAnnotationKey:   strconv.FormatBool(sc.elbTransparentClientIP),
-		LBHealthCheckSwitchAnnotationKey:      sc.lBHealthCheckSwitch,
+	svcAnnotations := make(map[string]string, 0)
+	for k, v := range sc.hwOptions {
+		svcAnnotations[k] = v
 	}
-	if sc.elbSessionAffinityMode == "SOURCE_IP" {
-		svcAnnotations[ElbSessionAffinityModeAnnotationKey] = "SOURCE_IP"
-	}
-	// only performance elb supports kubernetes.io/elb.x-forwarded-host, even set to false
-	if sc.elbClass == ElbClassPerformance {
-		svcAnnotations[ElbXForwardedHostAnnotationKey] = strconv.FormatBool(sc.elbXForwardedHost)
-	}
-	// the case where both exist has already been handled in the parseLbConfig function.
-	// must have one, even it is empty.
-	if sc.lBHealthCheckSwitch == "on" {
-		svcAnnotations[LBHealthCheckOptionAnnotationKey] = sc.lBHealthCheckOption
-
-		if sc.lBHealthCheckOptions != "" {
-			svcAnnotations[LBHealthCheckOptionsAnnotationKey] = sc.lBHealthCheckOptions
-		}
-	}
-
+	// add hash to svc, otherwise, the status of GS will remain in NetworkNotReady.
+	svcAnnotations[ElbConfigHashKey] = util.GetHash(sc)
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            pod.GetName(),
