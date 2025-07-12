@@ -23,12 +23,6 @@ import (
 	"strings"
 	"sync"
 
-	gamekruiseiov1alpha1 "github.com/openkruise/kruise-game/apis/v1alpha1"
-	"github.com/openkruise/kruise-game/cloudprovider"
-	cperrors "github.com/openkruise/kruise-game/cloudprovider/errors"
-	provideroptions "github.com/openkruise/kruise-game/cloudprovider/options"
-	"github.com/openkruise/kruise-game/cloudprovider/utils"
-	"github.com/openkruise/kruise-game/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,6 +31,13 @@ import (
 	log "k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	gamekruiseiov1alpha1 "github.com/openkruise/kruise-game/apis/v1alpha1"
+	"github.com/openkruise/kruise-game/cloudprovider"
+	cperrors "github.com/openkruise/kruise-game/cloudprovider/errors"
+	provideroptions "github.com/openkruise/kruise-game/cloudprovider/options"
+	"github.com/openkruise/kruise-game/cloudprovider/utils"
+	"github.com/openkruise/kruise-game/pkg/util"
 )
 
 const (
@@ -44,15 +45,32 @@ const (
 	ExternalTrafficPolicyTypeConfigName = "ExternalTrafficPolicyType"
 	PublishNotReadyAddressesConfigName  = "PublishNotReadyAddresses"
 
-	ElbIdAnnotationKey                 = "kubernetes.io/elb.id"
-	ElbConfigHashKey                   = "game.kruise.io/network-config-hash"
-	SvcSelectorKey                     = "statefulset.kubernetes.io/pod-name"
-	ProtocolTCPUDP     corev1.Protocol = "TCPUDP"
-	FixedConfigName                    = "Fixed"
+	ElbIdAnnotationKey                         = "kubernetes.io/elb.id"
+	ElbAutocreateAnnotationKey                 = "kubernetes.io/elb.autocreate"
+	ElbConfigHashKey                           = "game.kruise.io/network-config-hash"
+	SvcSelectorKey                             = "statefulset.kubernetes.io/pod-name"
+	ProtocolTCPUDP             corev1.Protocol = "TCPUDP"
+	FixedConfigName                            = "Fixed"
 
 	ElbNetwork = "HwCloud-ELB"
 	AliasELB   = "ELB-Network"
 )
+
+type elbConfig struct {
+	lbIds                     []string
+	targetPorts               []int
+	protocols                 []corev1.Protocol
+	isFixed                   bool
+	externalTrafficPolicyType corev1.ServiceExternalTrafficPolicyType
+	publishNotReadyAddresses  bool
+	hwOptions                 map[string]string
+}
+
+func (e elbConfig) isAutoCreateElb() bool {
+	// auto create elb mode annotation
+	jsonValue, ok := e.hwOptions[ElbAutocreateAnnotationKey]
+	return ok && jsonValue != "" && len(e.lbIds) == 0
+}
 
 type portAllocated map[int32]bool
 
@@ -63,16 +81,6 @@ type ElbPlugin struct {
 	cache       map[string]portAllocated
 	podAllocate map[string]string
 	mutex       sync.RWMutex
-}
-
-type elbConfig struct {
-	lbIds                     []string
-	targetPorts               []int
-	protocols                 []corev1.Protocol
-	isFixed                   bool
-	externalTrafficPolicyType corev1.ServiceExternalTrafficPolicyType
-	publishNotReadyAddresses  bool
-	hwOptions                 map[string]string
 }
 
 func (s *ElbPlugin) Name() string {
@@ -101,6 +109,44 @@ func (s *ElbPlugin) Init(c client.Client, options cloudprovider.CloudProviderOpt
 	s.cache, s.podAllocate = initLbCache(svcList.Items, s.minPort, s.maxPort, s.blockPorts)
 	log.Infof("[%s] podAllocate cache complete initialization: %v", ElbNetwork, s.podAllocate)
 	return nil
+}
+
+// fillCache: you need to add lock before calling this function
+func (s *ElbPlugin) fillCache(lbId string, usedPorts []int32) {
+	if s.cache[lbId] != nil {
+		return
+	}
+	alloc := make(portAllocated, s.maxPort-s.minPort+1)
+	for port := s.minPort; port <= s.maxPort; port++ {
+		alloc[port] = false
+	}
+	for _, port := range s.blockPorts {
+		if port >= s.minPort && port <= s.maxPort {
+			alloc[port] = true
+		}
+	}
+	for _, port := range usedPorts {
+		s.cache[lbId][port] = true
+	}
+	s.cache[lbId] = alloc
+}
+
+func (s *ElbPlugin) updateCachesAfterAutoCreateElb(ctx context.Context, c client.Client, name, namespace string) {
+	svc := &corev1.Service{}
+	err := c.Get(ctx, types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}, svc)
+	if err == nil {
+		elbId := svc.Annotations[ElbIdAnnotationKey]
+		usedPorts := getPorts(svc.Spec.Ports)
+		if elbId != "" && len(usedPorts) > 0 {
+			s.mutex.Lock()
+			defer s.mutex.Unlock()
+			s.fillCache(elbId, usedPorts)
+			s.podAllocate[newPodAllocateKey(name, namespace)] = newPodAllocateValue(elbId, usedPorts)
+		}
+	}
 }
 
 func initLbCache(svcList []corev1.Service, minPort, maxPort int32, blockPorts []int32) (map[string]portAllocated, map[string]string) {
@@ -135,7 +181,7 @@ func initLbCache(svcList []corev1.Service, minPort, maxPort int32, blockPorts []
 				}
 			}
 			if len(ports) != 0 {
-				newPodAllocate[svc.GetNamespace()+"/"+svc.GetName()] = lbId + ":" + util.Int32SliceToString(ports, ",")
+				newPodAllocate[newPodAllocateKey(svc.GetName(), svc.GetNamespace())] = newPodAllocateValue(lbId, ports)
 				log.Infof("svc %s/%s allocate elb %s ports %v", svc.Namespace, svc.Name, lbId, ports)
 			}
 		}
@@ -175,7 +221,11 @@ func (s *ElbPlugin) OnPodUpdated(c client.Client, pod *corev1.Pod, ctx context.C
 			if err != nil {
 				return pod, cperrors.ToPluginError(err, cperrors.ParameterError)
 			}
-			return pod, cperrors.ToPluginError(c.Create(ctx, service), cperrors.ApiCallError)
+			err = c.Create(ctx, service)
+			if err == nil {
+				s.updateCachesAfterAutoCreateElb(ctx, c, service.Name, service.Namespace)
+			}
+			return pod, cperrors.ToPluginError(err, cperrors.ApiCallError)
 		}
 		return pod, cperrors.NewPluginError(cperrors.ApiCallError, err.Error())
 	}
@@ -306,7 +356,7 @@ func (s *ElbPlugin) OnPodDeleted(c client.Client, pod *corev1.Pod, ctx context.C
 	return nil
 }
 
-func (s *ElbPlugin) allocate(lbIds []string, num int, nsName string) (string, []int32) {
+func (s *ElbPlugin) allocate(lbIds []string, num int, podKey string) (string, []int32) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -333,18 +383,7 @@ func (s *ElbPlugin) allocate(lbIds []string, num int, nsName string) (string, []
 	// select ports
 	for i := 0; i < num; i++ {
 		var port int32
-		if s.cache[lbId] == nil {
-			// init cache for new lb
-			s.cache[lbId] = make(portAllocated, s.maxPort-s.minPort+1)
-			for i := s.minPort; i <= s.maxPort; i++ {
-				s.cache[lbId][i] = false
-			}
-			// block ports
-			for _, blockPort := range s.blockPorts {
-				s.cache[lbId][blockPort] = true
-			}
-		}
-
+		s.fillCache(lbId, nil)
 		for p, allocated := range s.cache[lbId] {
 			if !allocated {
 				port = p
@@ -354,17 +393,16 @@ func (s *ElbPlugin) allocate(lbIds []string, num int, nsName string) (string, []
 		s.cache[lbId][port] = true
 		ports = append(ports, port)
 	}
-
-	s.podAllocate[nsName] = lbId + ":" + util.Int32SliceToString(ports, ",")
-	log.Infof("pod %s allocate slb %s ports %v", nsName, lbId, ports)
+	s.podAllocate[podKey] = newPodAllocateValue(lbId, ports)
+	log.Infof("pod %s allocate slb %s ports %v", podKey, lbId, ports)
 	return lbId, ports
 }
 
-func (s *ElbPlugin) deAllocate(nsName string) {
+func (s *ElbPlugin) deAllocate(nsSvcKey string) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	allocatedPorts, exist := s.podAllocate[nsName]
+	allocatedPorts, exist := s.podAllocate[nsSvcKey]
 	if !exist {
 		return
 	}
@@ -380,8 +418,8 @@ func (s *ElbPlugin) deAllocate(nsName string) {
 		s.cache[lbId][blockPort] = true
 	}
 
-	delete(s.podAllocate, nsName)
-	log.Infof("pod %s deallocate slb %s ports %v", nsName, lbId, ports)
+	delete(s.podAllocate, nsSvcKey)
+	log.Infof("pod %s deallocate slb %s ports %v", nsSvcKey, lbId, ports)
 }
 
 func init() {
@@ -400,15 +438,28 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 		publishNotReadyAddresses:  false,
 		hwOptions:                 make(map[string]string),
 	}
+	specifyElbId := false
+	autoCreateElb := false
 	for _, c := range conf {
 		switch c.Name {
-		// huawei only supports one elb id
-		case "kubernetes.io/elb.id":
+		case ElbIdAnnotationKey:
+			if autoCreateElb {
+				return nil, fmt.Errorf("%s and %s cannot be filled in simultaneously",
+					ElbIdAnnotationKey, ElbAutocreateAnnotationKey)
+			}
+			specifyElbId = true
+			// huawei only supports one elb id
 			if c.Value == "" {
 				return nil, fmt.Errorf("no elb id found, must specify at least one elb id")
 			}
 			res.lbIds = []string{c.Value}
 			res.hwOptions[c.Name] = c.Value
+		case ElbAutocreateAnnotationKey:
+			if specifyElbId {
+				return nil, fmt.Errorf("%s and %s cannot be filled in simultaneously",
+					ElbIdAnnotationKey, ElbAutocreateAnnotationKey)
+			}
+			autoCreateElb = true
 		case PortProtocolsConfigName:
 			for _, pp := range strings.Split(c.Value, ",") {
 				ppSlice := strings.Split(pp, "/")
@@ -464,8 +515,11 @@ func (s *ElbPlugin) consSvc(sc *elbConfig, pod *corev1.Pod, c client.Client, ctx
 		lbId = slbPorts[0]
 		ports = util.StringToInt32Slice(slbPorts[1], ",")
 	} else {
-		//TODO: 不兼容auto create模式?
-		lbId, ports = s.allocate(sc.lbIds, len(sc.targetPorts), podKey)
+		if sc.isAutoCreateElb() {
+			lbId, ports = "", s.getPortFromHead(len(sc.targetPorts))
+		} else {
+			lbId, ports = s.allocate(sc.lbIds, len(sc.targetPorts), podKey)
+		}
 		if lbId == "" && ports == nil {
 			return nil, fmt.Errorf("there are no avaliable ports for %v", sc.lbIds)
 		}
@@ -523,6 +577,14 @@ func (s *ElbPlugin) consSvc(sc *elbConfig, pod *corev1.Pod, c client.Client, ctx
 	return svc, nil
 }
 
+func (s *ElbPlugin) getPortFromHead(num int) []int32 {
+	res := make([]int32, num)
+	for i := 0; i < num; i++ {
+		res[i] = s.minPort + int32(i)
+	}
+	return res
+}
+
 func getSvcOwnerReference(c client.Client, ctx context.Context, pod *corev1.Pod, isFixed bool) []metav1.OwnerReference {
 	ownerReferences := []metav1.OwnerReference{
 		{
@@ -550,4 +612,12 @@ func getSvcOwnerReference(c client.Client, ctx context.Context, pod *corev1.Pod,
 		}
 	}
 	return ownerReferences
+}
+
+func newPodAllocateKey(name, namespace string) string {
+	return namespace + "/" + name
+}
+
+func newPodAllocateValue(elbId string, ports []int32) string {
+	return elbId + ":" + util.Int32SliceToString(ports, ",")
 }
