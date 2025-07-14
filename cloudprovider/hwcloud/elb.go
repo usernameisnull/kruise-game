@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -125,26 +126,75 @@ func (s *ElbPlugin) fillCache(lbId string, usedPorts []int32) {
 			alloc[port] = true
 		}
 	}
+	s.cache[lbId] = alloc
 	for _, port := range usedPorts {
 		s.cache[lbId][port] = true
 	}
-	s.cache[lbId] = alloc
 }
 
-func (s *ElbPlugin) updateCachesAfterAutoCreateElb(ctx context.Context, c client.Client, name, namespace string) {
-	svc := &corev1.Service{}
-	err := c.Get(ctx, types.NamespacedName{
-		Name:      name,
-		Namespace: namespace,
-	}, svc)
-	if err == nil {
-		elbId := svc.Annotations[ElbIdAnnotationKey]
-		usedPorts := getPorts(svc.Spec.Ports)
-		if elbId != "" && len(usedPorts) > 0 {
+func (s *ElbPlugin) updateCachesAfterAutoCreateElb(c client.Client, name, namespace string) {
+	const (
+		interval     = 5 * time.Second
+		totalTimeout = 10 * time.Minute
+	)
+
+	log.Infof("Starting periodic cache update for %s/%s (interval: %s, timeout: %s)",
+		namespace, name, interval, "10m")
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), totalTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	var (
+		attempt   int
+		success   bool
+		lastError error
+	)
+
+	for {
+		select {
+		case <-timeoutCtx.Done():
+			if success {
+				log.Infof("Successfully completed cache update for %s/%s after %d attempts",
+					namespace, name, attempt)
+			} else {
+				log.Warningf("Cache update failed for %s/%s after %d attempts. Last error: %v",
+					namespace, name, attempt, lastError)
+			}
+			return
+
+		case <-ticker.C:
+			attempt++
+			log.Infof("Attempt #%d: updating cache for %s/%s", attempt, namespace, name)
+
+			svc := &corev1.Service{}
+			err := c.Get(timeoutCtx, types.NamespacedName{
+				Name:      name,
+				Namespace: namespace,
+			}, svc)
+
+			if err != nil {
+				log.Errorf("failed to get Service: %s", err)
+				continue
+			}
+
+			elbId := svc.Annotations[ElbIdAnnotationKey]
+			usedPorts := getPorts(svc.Spec.Ports)
+
+			if elbId == "" || len(usedPorts) == 0 {
+				continue
+			}
+
 			s.mutex.Lock()
-			defer s.mutex.Unlock()
 			s.fillCache(elbId, usedPorts)
 			s.podAllocate[newPodAllocateKey(name, namespace)] = newPodAllocateValue(elbId, usedPorts)
+			s.mutex.Unlock()
+
+			log.Infof("Attempt #%d success: updated cache for %s/%s with ELB %s and %d ports",
+				attempt, namespace, name, elbId, len(usedPorts))
+			success = true
+			return
 		}
 	}
 }
@@ -221,11 +271,11 @@ func (s *ElbPlugin) OnPodUpdated(c client.Client, pod *corev1.Pod, ctx context.C
 			if err != nil {
 				return pod, cperrors.ToPluginError(err, cperrors.ParameterError)
 			}
-			err = c.Create(ctx, service)
-			if err == nil {
-				s.updateCachesAfterAutoCreateElb(ctx, c, service.Name, service.Namespace)
+			if err = c.Create(ctx, service); err != nil {
+				return pod, cperrors.ToPluginError(err, cperrors.ApiCallError)
 			}
-			return pod, cperrors.ToPluginError(err, cperrors.ApiCallError)
+			go s.updateCachesAfterAutoCreateElb(c, pod.Name, pod.Namespace)
+			return pod, cperrors.ToPluginError(nil, cperrors.ApiCallError)
 		}
 		return pod, cperrors.NewPluginError(cperrors.ApiCallError, err.Error())
 	}
@@ -460,6 +510,7 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 					ElbIdAnnotationKey, ElbAutocreateAnnotationKey)
 			}
 			autoCreateElb = true
+			res.hwOptions[c.Name] = c.Value
 		case PortProtocolsConfigName:
 			for _, pp := range strings.Split(c.Value, ",") {
 				ppSlice := strings.Split(pp, "/")
