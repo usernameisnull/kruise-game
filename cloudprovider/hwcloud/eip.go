@@ -24,7 +24,6 @@ var allowedAnnotations = []string{
 	"yangtse.io/eip-network-type",
 	"yangtse.io/eip-charge-mode",
 	"yangtse.io/eip-bandwidth-name",
-	"yangtse.io/pod-with-eip",
 	"yangtse.io/eip-network-type",
 	"yangtse.io/eip-bandwidth-id",
 }
@@ -67,7 +66,10 @@ func (E EipPlugin) OnPodAdded(client client.Client, pod *corev1.Pod, ctx context
 
 func (E EipPlugin) OnPodUpdated(client client.Client, pod *corev1.Pod, ctx context.Context) (*corev1.Pod, errors.PluginError) {
 	networkManager := utils.NewNetworkManager(pod, client)
-
+	if networkManager.GetNetworkType() != EIPNetwork {
+		log.Infof("pod %s/%s network type is not %s, skipping", pod.Namespace, pod.Name, EIPNetwork)
+		return pod, nil
+	}
 	networkStatus, _ := networkManager.GetNetworkStatus()
 	if networkStatus == nil {
 		pod, err := networkManager.UpdateNetworkStatus(gamekruiseiov1alpha1.NetworkStatus{
