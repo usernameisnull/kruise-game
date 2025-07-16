@@ -58,7 +58,7 @@ const (
 )
 
 type elbConfig struct {
-	lbIds                     []string
+	elbIds                    []string
 	targetPorts               []int
 	protocols                 []corev1.Protocol
 	isFixed                   bool
@@ -70,7 +70,7 @@ type elbConfig struct {
 func (e elbConfig) isAutoCreateElb() bool {
 	// auto create elb mode annotation
 	jsonValue, ok := e.hwOptions[ElbAutocreateAnnotationKey]
-	return ok && jsonValue != "" && len(e.lbIds) == 0
+	return ok && jsonValue != "" && len(e.elbIds) == 0
 }
 
 type portAllocated map[int32]bool
@@ -245,7 +245,10 @@ func (s *ElbPlugin) OnPodAdded(c client.Client, pod *corev1.Pod, ctx context.Con
 
 func (s *ElbPlugin) OnPodUpdated(c client.Client, pod *corev1.Pod, ctx context.Context) (*corev1.Pod, cperrors.PluginError) {
 	networkManager := utils.NewNetworkManager(pod, c)
-
+	if networkManager.GetNetworkType() != ElbNetwork {
+		log.Infof("pod %s/%s network type is not %s, skipping", pod.Namespace, pod.Name, ElbNetwork)
+		return pod, nil
+	}
 	networkStatus, _ := networkManager.GetNetworkStatus()
 	if networkStatus == nil {
 		pod, err := networkManager.UpdateNetworkStatus(gamekruiseiov1alpha1.NetworkStatus{
@@ -274,7 +277,9 @@ func (s *ElbPlugin) OnPodUpdated(c client.Client, pod *corev1.Pod, ctx context.C
 			if err = c.Create(ctx, service); err != nil {
 				return pod, cperrors.ToPluginError(err, cperrors.ApiCallError)
 			}
-			go s.updateCachesAfterAutoCreateElb(c, pod.Name, pod.Namespace)
+			if sc.isAutoCreateElb() {
+				go s.updateCachesAfterAutoCreateElb(c, pod.Name, pod.Namespace)
+			}
 			return pod, cperrors.ToPluginError(nil, cperrors.ApiCallError)
 		}
 		return pod, cperrors.NewPluginError(cperrors.ApiCallError, err.Error())
@@ -373,6 +378,10 @@ func (s *ElbPlugin) OnPodUpdated(c client.Client, pod *corev1.Pod, ctx context.C
 func (s *ElbPlugin) OnPodDeleted(c client.Client, pod *corev1.Pod, ctx context.Context) cperrors.PluginError {
 	networkManager := utils.NewNetworkManager(pod, c)
 	networkConfig := networkManager.GetNetworkConfig()
+	if networkManager.GetNetworkType() != ElbNetwork {
+		log.Infof("pod %s/%s network type is not %s, skipping", pod.Namespace, pod.Name, ElbNetwork)
+		return nil
+	}
 	sc, err := parseLbConfig(networkConfig)
 	if err != nil {
 		return cperrors.NewPluginError(cperrors.ParameterError, err.Error())
@@ -414,14 +423,14 @@ func (s *ElbPlugin) allocate(lbIds []string, num int, podKey string) (string, []
 	var lbId string
 
 	// find lb with adequate ports
-	for _, slbId := range lbIds {
+	for _, elbId := range lbIds {
 		sum := 0
 		for i := s.minPort; i <= s.maxPort; i++ {
-			if !s.cache[slbId][i] {
+			if !s.cache[elbId][i] {
 				sum++
 			}
 			if sum >= num {
-				lbId = slbId
+				lbId = elbId
 				break
 			}
 		}
@@ -444,7 +453,7 @@ func (s *ElbPlugin) allocate(lbIds []string, num int, podKey string) (string, []
 		ports = append(ports, port)
 	}
 	s.podAllocate[podKey] = newPodAllocateValue(lbId, ports)
-	log.Infof("pod %s allocate slb %s ports %v", podKey, lbId, ports)
+	log.Infof("pod %s allocate elb %s ports %v", podKey, lbId, ports)
 	return lbId, ports
 }
 
@@ -457,9 +466,9 @@ func (s *ElbPlugin) deAllocate(nsSvcKey string) {
 		return
 	}
 
-	slbPorts := strings.Split(allocatedPorts, ":")
-	lbId := slbPorts[0]
-	ports := util.StringToInt32Slice(slbPorts[1], ",")
+	elbPorts := strings.Split(allocatedPorts, ":")
+	lbId := elbPorts[0]
+	ports := util.StringToInt32Slice(elbPorts[1], ",")
 	for _, port := range ports {
 		s.cache[lbId][port] = false
 	}
@@ -469,7 +478,7 @@ func (s *ElbPlugin) deAllocate(nsSvcKey string) {
 	}
 
 	delete(s.podAllocate, nsSvcKey)
-	log.Infof("pod %s deallocate slb %s ports %v", nsSvcKey, lbId, ports)
+	log.Infof("pod %s deallocate elb %s ports %v", nsSvcKey, lbId, ports)
 }
 
 func init() {
@@ -502,7 +511,7 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 			if c.Value == "" {
 				return nil, fmt.Errorf("no elb id found, must specify at least one elb id")
 			}
-			res.lbIds = []string{c.Value}
+			res.elbIds = []string{c.Value}
 			res.hwOptions[c.Name] = c.Value
 		case ElbAutocreateAnnotationKey:
 			if specifyElbId {
@@ -562,17 +571,17 @@ func (s *ElbPlugin) consSvc(sc *elbConfig, pod *corev1.Pod, c client.Client, ctx
 	podKey := pod.GetNamespace() + "/" + pod.GetName()
 	allocatedPorts, exist := s.podAllocate[podKey]
 	if exist {
-		slbPorts := strings.Split(allocatedPorts, ":")
-		lbId = slbPorts[0]
-		ports = util.StringToInt32Slice(slbPorts[1], ",")
+		elbPorts := strings.Split(allocatedPorts, ":")
+		lbId = elbPorts[0]
+		ports = util.StringToInt32Slice(elbPorts[1], ",")
 	} else {
 		if sc.isAutoCreateElb() {
 			lbId, ports = "", s.getPortFromHead(len(sc.targetPorts))
 		} else {
-			lbId, ports = s.allocate(sc.lbIds, len(sc.targetPorts), podKey)
+			lbId, ports = s.allocate(sc.elbIds, len(sc.targetPorts), podKey)
 		}
 		if lbId == "" && ports == nil {
-			return nil, fmt.Errorf("there are no avaliable ports for %v", sc.lbIds)
+			return nil, fmt.Errorf("there are no avaliable ports for %v", sc.elbIds)
 		}
 	}
 
