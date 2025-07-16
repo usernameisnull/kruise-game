@@ -44,7 +44,6 @@ import (
 const (
 	PortProtocolsConfigName             = "PortProtocols"
 	ExternalTrafficPolicyTypeConfigName = "ExternalTrafficPolicyType"
-	PublishNotReadyAddressesConfigName  = "PublishNotReadyAddresses"
 
 	ElbIdAnnotationKey                         = "kubernetes.io/elb.id"
 	ElbAutocreateAnnotationKey                 = "kubernetes.io/elb.autocreate"
@@ -63,7 +62,6 @@ type elbConfig struct {
 	protocols                 []corev1.Protocol
 	isFixed                   bool
 	externalTrafficPolicyType corev1.ServiceExternalTrafficPolicyType
-	publishNotReadyAddresses  bool
 	hwOptions                 map[string]string
 }
 
@@ -494,7 +492,6 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 		protocols:                 make([]corev1.Protocol, 0),
 		isFixed:                   false,
 		externalTrafficPolicyType: corev1.ServiceExternalTrafficPolicyTypeCluster,
-		publishNotReadyAddresses:  false,
 		hwOptions:                 make(map[string]string),
 	}
 	specifyElbId := false
@@ -544,12 +541,6 @@ func parseLbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*elbConfig, e
 			if strings.EqualFold(c.Value, string(corev1.ServiceExternalTrafficPolicyTypeLocal)) {
 				res.externalTrafficPolicyType = corev1.ServiceExternalTrafficPolicyTypeLocal
 			}
-		case PublishNotReadyAddressesConfigName:
-			v, err := strconv.ParseBool(c.Value)
-			if err != nil {
-				continue
-			}
-			res.publishNotReadyAddresses = v
 		default:
 			res.hwOptions[c.Name] = c.Value
 		}
@@ -625,9 +616,8 @@ func (s *ElbPlugin) consSvc(sc *elbConfig, pod *corev1.Pod, c client.Client, ctx
 			OwnerReferences: getSvcOwnerReference(c, ctx, pod, sc.isFixed),
 		},
 		Spec: corev1.ServiceSpec{
-			Type:                     corev1.ServiceTypeLoadBalancer,
-			ExternalTrafficPolicy:    sc.externalTrafficPolicyType,
-			PublishNotReadyAddresses: sc.publishNotReadyAddresses,
+			Type:                  corev1.ServiceTypeLoadBalancer,
+			ExternalTrafficPolicy: sc.externalTrafficPolicyType,
 			Selector: map[string]string{
 				SvcSelectorKey: pod.GetName(),
 			},
