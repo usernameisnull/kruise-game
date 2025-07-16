@@ -1091,122 +1091,46 @@ The network status of GameServer would be as follows:
 
 #### Cloud Provider
 
-HwCloud
+HuaweiCloud
 
 #### Plugin description
 
-- HwCloud-ELB enables game servers to be accessed from the Internet by using Layer 4 Load Balancer (ELB) of Huawei Cloud. ELB is a type of Server Load Balancer (SLB). HwCloud-ELB uses different ports of the same ELB instance to forward Internet traffic to different game servers. The ELB instance only forwards traffic, but does not implement load balancing.
+- HwCloud-ELB uses Huawei Cloud Load Balancer (ELB) as the entity for external service hosting. It distributes external traffic to multiple Pods within the cluster through Elastic Load Balancing (ELB), providing higher reliability compared to the NodePort type.
 
-- This network plugin supports network isolation.
+- Documentation: https://support.huaweicloud.com/usermanual-cce/cce_10_0681.html
+  
+- Supports Network Isolation: Yes.
 
 #### Network parameters
 
-ElbIds
-
-- Meaning: the ELB instance ID. You can fill in multiple ids. （at least one）
-- Value: in the format of elbId-0,elbId-1,... An example value can be "lb-9zeo7prq1m25ctpfrw1m7,lb-bp1qz7h50yd3w58h2f8je"
-- Configuration change supported or not: yes. You can add new elbIds at the end. However, it is recommended not to change existing elbId that is in use.
-
 PortProtocols
 
-- Meaning: the ports in the pod to be exposed and the protocols. You can specify multiple ports and protocols.
-- Value: in the format of port1/protocol1,port2/protocol2,... (same protocol port should like 8000/TCPUDP) The protocol names must be in uppercase letters.
-- Configuration change supported or not: yes.
+- Meaning: Exposed ports and protocols of the Pod. Supports multiple ports/protocols.
+- Format: port1/protocol1,port2/protocol2,... (Protocols must be uppercase).
+- Supports Modification: Yes.
 
 Fixed
 
-- Meaning: whether the mapping relationship is fixed. If the mapping relationship is fixed, the mapping relationship remains unchanged even if the pod is deleted and recreated.
-- Value: false or true.
-- Configuration change supported or not: yes.
+- Meaning: Whether to retain fixed access IP/port. If enabled, the external/internal mapping relationship remains unchanged even if Pods are recreated.
+- Format: false / true
+- Supports Modification: Yes.
 
 AllowNotReadyContainers
 
-- Meaning: the container names that are allowed not ready when inplace updating, when traffic will not be cut.
-- Value: {containerName_0},{containerName_1},... Example：sidecar
-- Configuration change supported or not: It cannot be changed during the in-place updating process.
-
+- Meaning: Container names allowed to maintain traffic flow during in-place upgrades.
+- Format: {containerName_0},{containerName_1},... e.g., sidecar
+- Supports Modification: Not modifiable during in-place upgrades.
 
 ExternalTrafficPolicyType
 
-- Meaning: Service LB forward type, if Local， Service LB just forward traffice to local node Pod, we can keep source IP without SNAT
-- Value: : Local/Cluster Default value is Cluster
-- Configuration change supported or not: not. It maybe related to "IP/Port mapping relationship Fixed", recommend not to change
+- Meaning: Determines whether Service LB forwards traffic only to local instances. Setting to Local creates a Local-type Service and retains client source IP addresses when configured with cloud-manager.
+- Format: Local / Cluster (Default: Cluster)
+- Supports Modification: No. Due to dependencies on fixed IP/port settings, modification is not recommended.
 
+Other Huawei CCE Cluster Parameters  
+Refer to annotations' keys/values in the documentation: 
+- [LoadBalancer](https://support.huaweicloud.com/usermanual-cce/cce_10_0014.html)
 
-LB config parameters consistent with huawei cloud ccm https://github.com/kubernetes-sigs/cloud-provider-huaweicloud/blob/master/docs/usage-guide.md
-
-LBHealthCheckFlag
-
-- Meaning: Whether to enable health check
-- Format: "on" means on, "off" means off. Default is on
-- Whether to support changes: Yes
-
-LBHealthCheckOption
-
-- Meaning: Health Check Config
-- Format: json string link {"delay": 3, "timeout": 15, "max_retries": 3}
-- Whether to support changes: Yes
-
-ElbClass
-
-- Meaning: huawei lb class
-- Format: dedicated or shared  (default dedicated)
-- Whether to support changes: No
-
-
-ElbConnLimit
-
-- Meaning: elb conn limit work with shared class lb
-- Format: the value ranges from -1 to 2147483647. The default value is -1
-- Whether to support changes: No
-
-ElbLbAlgorithm
-
-- Meaning: Specifies the load balancing algorithm of the backend server group
-- Format: ROUND_ROBIN,LEAST_CONNECTIONS,SOURCE_IP default ROUND_ROBIN
-- Whether to support changes: Yes
-
-ElbSessionAffinityFlag
-
-- Meaning: Specifies whether to enable session affinity
-- Format: on, off default off
-- Whether to support changes: Yes
-
-ElbSessionAffinityOption
-
-- Meaning: Specifies the sticky session timeout duration in minutes.
-- Format: json string like {"type": "SOURCE_IP", "persistence_timeout": 15}
-- Whether to support changes: Yes
-
-ElbTransparentClientIP
-
-- Meaning: Specifies whether to pass source IP addresses of the clients to backend servers
-- Format: true or false default false
-- Whether to support changes: Yes
-
-ElbXForwardedHost
-
-- Meaning: Specifies whether to rewrite the X-Forwarded-Host header
-- Format: true or false default false
-- Whether to support changes: Yes
-
-ElbIdleTimeout
-
-- Meaning: Specifies the idle timeout for the listener
-- Format: 0 to 4000 default not set, use lb default value
-- Whether to support changes: Yes
-
-ElbRequestTimeout
-
-- Meaning: Specifies the request timeout for the listener.
-- Format: 1 to 300 default not set, use lb default value
-- Whether to support changes: Yes
-
-ElbResponseTimeout
-
-- Meaning: Specifies the response timeout for the listener
-- Format: 1 to 300 default not set, use lb default value
-- Whether to support changes: Yes
 
 #### Plugin configuration
 ```
@@ -1221,7 +1145,8 @@ block_ports = []
 ---
 
 #### Example
-
+Using Existing ELB  
+https://support.huaweicloud.com/usermanual-cce/cce_10_0385.html#section1
 ```yaml
 apiVersion: game.kruise.io/v1alpha1
 kind: GameServerSet
@@ -1236,18 +1161,128 @@ spec:
   network:
     networkType: HwCloud-ELB
     networkConf:
-      - name: ElbIds
-        value: "8f4cxxxx-a659-40dc-8c77-6068b036xxxx,8f4cyyyy-a659-40dc-8c77-6068b036yyyy"
       - name: PortProtocols
-        value: "80/TCP,7777/UDP"
+        value: "80/TCP"
+      - name: kubernetes.io/elb.class # ELB实例的类型
+        value: performance
+      - name: kubernetes.io/elb.id # ELB实例的ID
+        value: 8f4cf216-a659-40dc-8c77-6068b036ba56
   gameServerTemplate:
     spec:
       containers:
         - image: nginx
           name: nginx
 ```
----
+Generated GameServer hw-elb-nginx-0 NetworkStatus:  
 
+```yaml
+  networkStatus:
+    createTime: "2025-07-16T08:02:08Z"
+    currentNetworkState: Ready
+    desiredNetworkState: Ready
+    externalAddresses:
+      - ip: 192.168.0.147
+        ports:
+          - name: "80"
+            port: 525
+            protocol: TCP
+    internalAddresses:
+      - ip: 192.168.1.38
+        ports:
+          - name: "80"
+            port: 80
+            protocol: TCP
+    lastTransitionTime: "2025-07-16T08:02:08Z"
+    networkType: HwCloud-ELB
+```
+Generated Service:  
+```bash
+kubectl get svc hw-elb-nginx-0
+NAME             TYPE           CLUSTER-IP       EXTERNAL-IP                   PORT(S)         AGE
+hw-elb-nginx-0   LoadBalancer   10.247.123.247   189.1.225.136,192.168.0.147   525:32400/TCP   13m
+```
+
+#### Plugin Name
+
+`HwCloud-EIP`
+
+#### Cloud Provider
+
+HuaweiCloud
+
+#### Plugin Description
+
+• Assigns a separate Elastic IP (EIP) to each pod.
+
+• The exposed public access port is identical to the port monitored within the container, managed through security groups.
+
+• Only supported in CCE Turbo clusters: https://support.huaweicloud.com/usermanual-cce/cce_10_0284.html#section1
+
+#### Network Parameters
+
+Refer to Huawei Cloud documentation: https://support.huaweicloud.com/usermanual-cce/cce_10_0734.html. This plugin supports all annotations on this page.
+
+#### Plugin Configuration
+
+None
+
+#### Example
+
+Exclusive Bandwidth EIP Created with Pod  
+For other available annotations, refer to Huawei Cloud documentation.  
+```yaml
+apiVersion: game.kruise.io/v1alpha1
+kind: GameServerSet
+metadata:
+  name: hwcloud-eip-performance
+  namespace: default
+spec:
+  replicas: 2
+  updateStrategy:
+    rollingUpdate:
+      podUpdatePolicy: InPlaceIfPossible
+  network:
+    networkType: HwCloud-EIP
+    networkConf:
+      # https://support.huaweicloud.com/usermanual-cce/cce_10_0734.html
+      - name: yangtse.io/pod-with-eip
+        value: "true"
+      - name: yangtse.io/eip-bandwidth-size
+        value: "5"
+      - name: yangtse.io/eip-network-type
+        value: "5_bgp"
+      - name: yangtse.io/eip-charge-mode
+        value: "traffic"
+  gameServerTemplate:
+    spec:
+      containers:
+        - image: nginx
+          name: nginx
+```
+
+Generated Pod Annotations:  
+`yangtse.io/allocated-eip-id` corresponds to the EIP viewable in Huawei Cloud's Elastic IP details.   
+`yangtse.io/allocated-ipv4-eip` is the pod's EIP.  
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    apps.kruise.io/runtime-containers-meta: '{"containers":[{"name":"nginx","containerID":"containerd://302f710dc7fb5771be5b16a31de84ff457fd84c9aa1ce00b7e7f2ddc3b7c3978","restartCount":0,"hashes":{"plainHash":2641665875,"plainHashWithoutResources":0,"extractedEnvFromMetadataHash":86995377}}]}'
+    game.kruise.io/network-conf: '[{"name":"yangtse.io/pod-with-eip","value":"true"},{"name":"yangtse.io/eip-bandwidth-size","value":"5"},{"name":"yangtse.io/eip-network-type","value":"5_bgp"},{"name":"yangtse.io/eip-charge-mode","value":"traffic"}]'
+    game.kruise.io/network-status: '{"currentNetworkState":"Ready","createTime":null,"lastTransitionTime":null}'
+    game.kruise.io/network-trigger-time: "2025-07-16 17:03:07"
+    game.kruise.io/network-type: HwCloud-EIP
+    game.kruise.io/opsState-last-changed-time: "2025-07-16 17:03:07"
+    game.kruise.io/state-last-changed-time: "2025-07-16 09:03:13"
+    lifecycle.apps.kruise.io/timestamp: "2025-07-16T09:03:03Z"
+    yangtse.io/allocated-eip-id: 3a52ca79-d78d-4fc2-8590-b7d8dae65675
+    yangtse.io/allocated-ipv4-eip: 94.74.110.168
+    yangtse.io/eip-bandwidth-size: "5"
+    yangtse.io/eip-charge-mode: traffic
+    yangtse.io/eip-network-type: 5_bgp
+    yangtse.io/pod-with-eip: "true"
+```
 ### Volcengine-EIP
 
 #### Plugin name
