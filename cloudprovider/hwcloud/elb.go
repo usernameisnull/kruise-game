@@ -242,6 +242,7 @@ func (s *ElbPlugin) OnPodAdded(c client.Client, pod *corev1.Pod, ctx context.Con
 }
 
 func (s *ElbPlugin) OnPodUpdated(c client.Client, pod *corev1.Pod, ctx context.Context) (*corev1.Pod, cperrors.PluginError) {
+	log.Infof("on update pod begin")
 	networkManager := utils.NewNetworkManager(pod, c)
 	if networkManager.GetNetworkType() != ElbNetwork {
 		log.Infof("pod %s/%s network type is not %s, skipping", pod.Namespace, pod.Name, ElbNetwork)
@@ -249,6 +250,7 @@ func (s *ElbPlugin) OnPodUpdated(c client.Client, pod *corev1.Pod, ctx context.C
 	}
 	networkStatus, _ := networkManager.GetNetworkStatus()
 	if networkStatus == nil {
+		log.Warningf("network status is nil")
 		pod, err := networkManager.UpdateNetworkStatus(gamekruiseiov1alpha1.NetworkStatus{
 			CurrentNetworkState: gamekruiseiov1alpha1.NetworkNotReady,
 		}, pod)
@@ -257,9 +259,10 @@ func (s *ElbPlugin) OnPodUpdated(c client.Client, pod *corev1.Pod, ctx context.C
 	networkConfig := networkManager.GetNetworkConfig()
 	sc, err := parseLbConfig(networkConfig)
 	if err != nil {
+		log.Errorf("parse elb config failed: %s, network configuration: %#v", err, networkConfig)
 		return pod, cperrors.ToPluginError(err, cperrors.ParameterError)
 	}
-
+	log.Infof("creating svc %s/%s", pod.GetNamespace(), pod.GetName())
 	// get svc
 	svc := &corev1.Service{}
 	err = c.Get(ctx, types.NamespacedName{
@@ -268,18 +271,22 @@ func (s *ElbPlugin) OnPodUpdated(c client.Client, pod *corev1.Pod, ctx context.C
 	}, svc)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
+			log.Infof("svc %s/%s not found, will create it", pod.GetNamespace(), pod.GetName())
 			service, err := s.consSvc(sc, pod, c, ctx)
 			if err != nil {
 				return pod, cperrors.ToPluginError(err, cperrors.ParameterError)
 			}
 			if err = c.Create(ctx, service); err != nil {
+				log.Errorf("create svc %s/%s failed: %s", pod.GetNamespace(), pod.GetName(), err)
 				return pod, cperrors.ToPluginError(err, cperrors.ApiCallError)
 			}
+			log.Infof("create svc %s/%s success", pod.GetNamespace(), pod.GetName())
 			if sc.isAutoCreateElb() {
 				go s.updateCachesAfterAutoCreateElb(c, pod.Name, pod.Namespace)
 			}
 			return pod, cperrors.ToPluginError(nil, cperrors.ApiCallError)
 		}
+		log.Errorf("get svc %s/%s failed: %s", pod.GetNamespace(), pod.GetName(), err)
 		return pod, cperrors.NewPluginError(cperrors.ApiCallError, err.Error())
 	}
 
