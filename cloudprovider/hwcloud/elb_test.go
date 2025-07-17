@@ -17,15 +17,19 @@ limitations under the License.
 package hwcloud
 
 import (
+	"context"
 	"reflect"
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	gamekruiseiov1alpha1 "github.com/openkruise/kruise-game/apis/v1alpha1"
+	"github.com/openkruise/kruise-game/cloudprovider/errors"
 )
 
 func TestAllocateDeAllocate(t *testing.T) {
@@ -285,5 +289,138 @@ func TestInitLbCache(t *testing.T) {
 	}
 	if !reflect.DeepEqual(actualPodAllocate, test.podAllocate) {
 		t.Errorf("podAllocate expect %v, but actully got %v", test.podAllocate, actualPodAllocate)
+	}
+}
+
+func TestElbPlugin_OnPodUpdated(t *testing.T) {
+	type fields struct {
+		maxPort     int32
+		minPort     int32
+		blockPorts  []int32
+		cache       map[string]portAllocated
+		podAllocate map[string]string
+		mutex       sync.RWMutex
+	}
+	type args struct {
+		c   client.Client
+		pod *corev1.Pod
+		ctx context.Context
+	}
+	networkNotReadyPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod-0",
+			Namespace: "default",
+			Annotations: map[string]string{
+				"game.kruise.io/network-type": ElbNetwork,
+				"game.kruise.io/network-conf": `[{"name":"PortProtocols","value":"80/TCP"},{"name":"kubernetes.io/elb.class","value":"performance"},{"name":"kubernetes.io/elb.id","value":"8f4cf216-a659-40dc-8c77-6068b036ba56"},{"name":"kubernetes.io/elb.connection-drain-enable","value":"true"},{"name":"kubernetes.io/elb.connection-drain-timeout","value":"300"}]`,
+			},
+		},
+	}
+	networkNotReadyPodWant := networkNotReadyPod.DeepCopy()
+	networkNotReadyPodWant.Annotations["game.kruise.io/network-status"] = `{"currentNetworkState":"NotReady","createTime":null,"lastTransitionTime":null}`
+	networkReadyPod := networkNotReadyPod.DeepCopy()
+	networkReadyPod.Annotations["game.kruise.io/network-status"] = `{"internalAddresses":[{"ip":"192.168.1.38","ports":[{"name":"80","protocol":"TCP","port":80}]}],"externalAddresses":[{"ip":"192.168.0.147","ports":[{"name":"80","protocol":"TCP","port":500}]}],"currentNetworkState":"Ready","createTime":null,"lastTransitionTime":null}`
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		setup  func(*MockClient, *MockNetworkManager)
+		want   *corev1.Pod
+		want1  errors.PluginError
+	}{
+		{
+			name: "network is not ready",
+			fields: fields{
+				maxPort:     500,
+				minPort:     502,
+				blockPorts:  []int32{501},
+				cache:       map[string]portAllocated{"8f4cf216-a659-40dc-8c77-6068b036ba56": map[int32]bool{500: true, 501: true, 502: false}},
+				podAllocate: map[string]string{"default/test-pod-0": "8f4cf216-a659-40dc-8c77-6068b036ba56:501"},
+				mutex:       sync.RWMutex{},
+			},
+			args: args{
+				c:   new(MockClient),
+				pod: networkNotReadyPod,
+				ctx: context.Background(),
+			},
+			setup: func(clientMock *MockClient, nmMock *MockNetworkManager) {
+				nmMock.On("GetNetworkType").Return(ElbNetwork)
+				nmMock.On("GetNetworkStatus").Return(nil, nil)
+			},
+			want:  networkNotReadyPodWant,
+			want1: nil,
+		},
+		{
+			name: "network is ready",
+			fields: fields{
+				maxPort:     500,
+				minPort:     502,
+				blockPorts:  []int32{501},
+				cache:       map[string]portAllocated{"8f4cf216-a659-40dc-8c77-6068b036ba56": map[int32]bool{500: true, 501: true, 502: false}},
+				podAllocate: map[string]string{"default/test-pod-0": "8f4cf216-a659-40dc-8c77-6068b036ba56:500,501"},
+				mutex:       sync.RWMutex{},
+			},
+			args: args{
+				c:   new(MockClient),
+				pod: networkReadyPod,
+				ctx: context.Background(),
+			},
+			setup: func(clientMock *MockClient, nmMock *MockNetworkManager) {
+				nmMock.On("GetNetworkType").Return(ElbNetwork)
+				nmMock.On("GetNetworkStatus").Return(gamekruiseiov1alpha1.NetworkStatus{
+					NetworkType: "",
+					InternalAddresses: []gamekruiseiov1alpha1.NetworkAddress{
+						{
+							IP: "192.168.1.38",
+							Ports: []gamekruiseiov1alpha1.NetworkPort{
+								{
+									Name:     "80",
+									Port:     &intstr.IntOrString{IntVal: 80},
+									Protocol: "TCP",
+								},
+							},
+						},
+					},
+					ExternalAddresses: []gamekruiseiov1alpha1.NetworkAddress{
+						{
+							IP: "192.168.0.199",
+							Ports: []gamekruiseiov1alpha1.NetworkPort{
+								{
+									Name:     "80",
+									Port:     &intstr.IntOrString{IntVal: 500},
+									Protocol: "TCP",
+								},
+							},
+						},
+					},
+					DesiredNetworkState: gamekruiseiov1alpha1.NetworkReady,
+					CurrentNetworkState: gamekruiseiov1alpha1.NetworkReady,
+				}, nil)
+			},
+			want:  networkNotReadyPodWant,
+			want1: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &ElbPlugin{
+				maxPort:     tt.fields.maxPort,
+				minPort:     tt.fields.minPort,
+				blockPorts:  tt.fields.blockPorts,
+				cache:       tt.fields.cache,
+				podAllocate: tt.fields.podAllocate,
+				mutex:       tt.fields.mutex,
+			}
+			clientMock := new(MockClient)
+			nmMock := new(MockNetworkManager)
+			if tt.setup != nil {
+				tt.setup(clientMock, nmMock)
+			}
+			got, got1 := s.OnPodUpdated(tt.args.c, tt.args.pod, tt.args.ctx)
+			assert.Equalf(t, tt.want.Annotations["game.kruise.io/network-status"], got.Annotations["game.kruise.io/network-status"], "OnPodUpdated(%v, %v, %v)", tt.args.c, tt.args.pod, tt.args.ctx)
+			assert.Equalf(t, tt.want.Annotations["game.kruise.io/network-type"], got.Annotations["game.kruise.io/network-type"], "OnPodUpdated(%v, %v, %v)", tt.args.c, tt.args.pod, tt.args.ctx)
+			assert.Equalf(t, tt.want.Annotations["game.kruise.io/network-conf"], got.Annotations["game.kruise.io/network-conf"], "OnPodUpdated(%v, %v, %v)", tt.args.c, tt.args.pod, tt.args.ctx)
+			assert.Equalf(t, tt.want1, got1, "OnPodUpdated(%v, %v, %v)", tt.args.c, tt.args.pod, tt.args.ctx)
+		})
 	}
 }
