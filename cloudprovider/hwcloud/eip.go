@@ -26,6 +26,9 @@ var allowedAnnotations = []string{
 	"yangtse.io/eip-bandwidth-name",
 	"yangtse.io/eip-network-type",
 	"yangtse.io/eip-bandwidth-id",
+	"yangtse.io/eip-id",
+	"yangtse.io/security-group-ids",
+	"yangtse.io/additional-security-group-ids",
 }
 
 type EipPlugin struct{}
@@ -56,8 +59,11 @@ func (E EipPlugin) OnPodAdded(client client.Client, pod *corev1.Pod, ctx context
 		allowedAnnotationsMap[item] = struct{}{}
 	}
 	for _, c := range conf {
-		if _, ok := allowedAnnotationsMap[c.Name]; ok {
+		_, ok := allowedAnnotationsMap[c.Name]
+		if ok {
 			pod.Annotations[c.Name] = c.Value
+		} else {
+			log.Warningf("pod %s/%s network config %s is not allowed", pod.Namespace, pod.Name, c.Name)
 		}
 	}
 

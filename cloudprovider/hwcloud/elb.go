@@ -112,6 +112,9 @@ func (s *ElbPlugin) Init(c client.Client, options cloudprovider.CloudProviderOpt
 
 // fillCache: you need to add lock before calling this function
 func (s *ElbPlugin) fillCache(lbId string, usedPorts []int32) {
+	if s.cache == nil {
+		s.cache = make(map[string]portAllocated)
+	}
 	if s.cache[lbId] != nil {
 		return
 	}
@@ -130,14 +133,13 @@ func (s *ElbPlugin) fillCache(lbId string, usedPorts []int32) {
 	}
 }
 
-func (s *ElbPlugin) updateCachesAfterAutoCreateElb(c client.Client, name, namespace string) {
-	const (
-		interval     = 5 * time.Second
-		totalTimeout = 10 * time.Minute
-	)
-
+func (s *ElbPlugin) updateCachesAfterAutoCreateElb(c client.Client, name, namespace string,
+	interval, totalTimeout time.Duration) {
+	if interval > totalTimeout {
+		panic("interval must be lesser than timeout")
+	}
 	log.Infof("Starting periodic cache update for %s/%s (interval: %s, timeout: %s)",
-		namespace, name, interval, "10m")
+		namespace, name, interval, totalTimeout)
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), totalTimeout)
 	defer cancel()
 
@@ -186,6 +188,9 @@ func (s *ElbPlugin) updateCachesAfterAutoCreateElb(c client.Client, name, namesp
 
 			s.mutex.Lock()
 			s.fillCache(elbId, usedPorts)
+			if s.podAllocate == nil {
+				s.podAllocate = make(map[string]string)
+			}
 			s.podAllocate[newPodAllocateKey(name, namespace)] = newPodAllocateValue(elbId, usedPorts)
 			s.mutex.Unlock()
 
@@ -282,7 +287,7 @@ func (s *ElbPlugin) OnPodUpdated(c client.Client, pod *corev1.Pod, ctx context.C
 			}
 			log.Infof("create svc %s/%s success", pod.GetNamespace(), pod.GetName())
 			if sc.isAutoCreateElb() {
-				go s.updateCachesAfterAutoCreateElb(c, pod.Name, pod.Namespace)
+				go s.updateCachesAfterAutoCreateElb(c, pod.Name, pod.Namespace, 5*time.Second, 10*time.Minute)
 			}
 			return pod, cperrors.ToPluginError(nil, cperrors.ApiCallError)
 		}
@@ -635,9 +640,18 @@ func (s *ElbPlugin) consSvc(sc *elbConfig, pod *corev1.Pod, c client.Client, ctx
 }
 
 func (s *ElbPlugin) getPortFromHead(num int) []int32 {
-	res := make([]int32, num)
-	for i := 0; i < num; i++ {
-		res[i] = s.minPort + int32(i)
+	res := make([]int32, 0)
+	blocked := make(map[int32]struct{})
+	for _, port := range s.blockPorts {
+		blocked[port] = struct{}{}
+	}
+	count := 0
+	for i := s.minPort; i <= s.maxPort && count < num; i++ {
+		if _, exist := blocked[i]; exist {
+			continue
+		}
+		count++
+		res = append(res, i)
 	}
 	return res
 }

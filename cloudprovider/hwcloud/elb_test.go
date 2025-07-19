@@ -18,15 +18,22 @@ package hwcloud
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/openkruise/kruise-game/cloudprovider"
+	"github.com/openkruise/kruise-game/cloudprovider/options"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	gamekruiseiov1alpha1 "github.com/openkruise/kruise-game/apis/v1alpha1"
@@ -323,7 +330,7 @@ func TestElbPlugin_OnPodUpdated(t *testing.T) {
 		name   string
 		fields fields
 		args   args
-		setup  func(*MockClient, *MockNetworkManager)
+		setup  func(*MockClient)
 		want   func() *corev1.Pod
 		want1  errors.PluginError
 	}{
@@ -344,7 +351,6 @@ func TestElbPlugin_OnPodUpdated(t *testing.T) {
 				},
 				ctx: context.Background(),
 			},
-			//want: networkNotReadyPodWant,
 			want: func() *corev1.Pod {
 				res := networkNotReadyPod.DeepCopy()
 				res.Annotations["game.kruise.io/network-status"] = `{"currentNetworkState":"NotReady","createTime":null,"lastTransitionTime":null}`
@@ -371,10 +377,8 @@ func TestElbPlugin_OnPodUpdated(t *testing.T) {
 				},
 				ctx: context.Background(),
 			},
-			setup: func(clientMock *MockClient, nmMock *MockNetworkManager) {
-				nmMock.On("GetNetworkType").Return(ElbNetwork)
+			setup: func(clientMock *MockClient) {
 				clientMock.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-					// 可选：填充一个 Service 实例作为输出
 					service := args[2].(*corev1.Service)
 					*service = corev1.Service{
 						TypeMeta: metav1.TypeMeta{
@@ -382,8 +386,8 @@ func TestElbPlugin_OnPodUpdated(t *testing.T) {
 							Kind:       "Service",
 						},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "gs-elb-performance-2-0",
-							Namespace: "kruise-game-system",
+							Name:      "test-pod-0",
+							Namespace: "default",
 							Annotations: map[string]string{
 								"game.kruise.io/network-config-hash":         "1234914076",
 								"kubernetes.io/elb.class":                    "performance",
@@ -398,7 +402,7 @@ func TestElbPlugin_OnPodUpdated(t *testing.T) {
 								{
 									APIVersion: "v1",
 									Kind:       "Pod",
-									Name:       "gs-elb-performance-2-0",
+									Name:       "test-pod-0",
 									UID:        "53cb0992-c720-4ae4-9af9-3cc7e2bf3660",
 								},
 							},
@@ -445,13 +449,45 @@ func TestElbPlugin_OnPodUpdated(t *testing.T) {
 			},
 			want1: nil,
 		},
+		{
+			name: "svc is not exist",
+			fields: fields{
+				maxPort:     500,
+				minPort:     502,
+				blockPorts:  []int32{501},
+				cache:       map[string]portAllocated{"8f4cf216-a659-40dc-8c77-6068b036ba56": map[int32]bool{500: true, 501: true, 502: false}},
+				podAllocate: map[string]string{"default/test-pod-0": "8f4cf216-a659-40dc-8c77-6068b036ba56:500,501"},
+				mutex:       sync.RWMutex{},
+			},
+			args: args{
+				c: nil,
+				pod: func() *corev1.Pod {
+					res := networkNotReadyPod.DeepCopy()
+					res.Annotations["game.kruise.io/network-status"] = `{"currentNetworkState":"NotReady","createTime":null,"lastTransitionTime":null}`
+					res.Annotations["game.kruise.io/network-conf"] = `[{"name":"Fixed", "value":"true"},{"name":"PortProtocols","value":"80/TCPUDP"},{"name":"kubernetes.io/elb.class","value":"union"},{"name":"kubernetes.io/elb.id","value":"c1d8f4c6-7aef-4596-8c7c-2de87ff89545"}]`
+					return res
+				},
+				ctx: context.Background(),
+			},
+			setup: func(clientMock *MockClient) {
+				clientMock.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(k8serrors.NewNotFound(schema.GroupResource{}, "test-pod-0"))
+				clientMock.On("Create", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+			},
+			want: func() *corev1.Pod {
+				res := networkNotReadyPod.DeepCopy()
+				res.Annotations["game.kruise.io/network-status"] = `{"currentNetworkState":"NotReady","createTime":null,"lastTransitionTime":null}`
+				res.Annotations["game.kruise.io/network-conf"] = `[{"name":"Fixed", "value":"true"},{"name":"PortProtocols","value":"80/TCPUDP"},{"name":"kubernetes.io/elb.class","value":"union"},{"name":"kubernetes.io/elb.id","value":"c1d8f4c6-7aef-4596-8c7c-2de87ff89545"}]`
+				return res
+			},
+			want1: nil,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			clientMock := new(MockClient)
-			nmMock := new(MockNetworkManager)
+			tt.args.c = clientMock
 			if tt.setup != nil {
-				tt.setup(clientMock, nmMock)
+				tt.setup(clientMock)
 			}
 			if tt.want == nil {
 				t.Fatal("want is nil, set the function")
@@ -473,6 +509,534 @@ func TestElbPlugin_OnPodUpdated(t *testing.T) {
 			assert.Equalf(t, tt.want().Annotations["game.kruise.io/network-type"], got.Annotations["game.kruise.io/network-type"], "OnPodUpdated(%v, %v, %v)", tt.args.c, tt.args.pod, tt.args.ctx)
 			assert.Equalf(t, tt.want().Annotations["game.kruise.io/network-conf"], got.Annotations["game.kruise.io/network-conf"], "OnPodUpdated(%v, %v, %v)", tt.args.c, tt.args.pod, tt.args.ctx)
 			assert.Equalf(t, tt.want1, got1, "OnPodUpdated(%v, %v, %v)", tt.args.c, tt.args.pod, tt.args.ctx)
+		})
+	}
+}
+
+func TestElbPlugin_Init(t *testing.T) {
+	type fields struct {
+		maxPort     int32
+		minPort     int32
+		blockPorts  []int32
+		cache       map[string]portAllocated
+		podAllocate map[string]string
+		mutex       sync.RWMutex
+	}
+	type args struct {
+		c       client.Client
+		options cloudprovider.CloudProviderOptions
+		ctx     context.Context
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		setup   func(clientMock *MockClient)
+		want    *ElbPlugin
+		wantErr assert.ErrorAssertionFunc
+	}{
+		{
+			name: "success",
+			fields: fields{
+				mutex: sync.RWMutex{},
+			},
+			args: args{
+				c: nil,
+				options: options.HwCloudOptions{
+					Enable: true,
+					ELBOptions: options.ELBOptions{
+						MaxPort:    503,
+						MinPort:    500,
+						BlockPorts: []int32{501},
+					},
+				},
+				ctx: context.Background(),
+			},
+			setup: func(clientMock *MockClient) {
+				clientMock.On("List", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+					res := args[1].(*corev1.ServiceList)
+					*res = corev1.ServiceList{
+						Items: []corev1.Service{
+							{
+								TypeMeta: metav1.TypeMeta{
+									APIVersion: "v1",
+									Kind:       "Service",
+								},
+								ObjectMeta: metav1.ObjectMeta{
+									Name:      "test-pod-0",
+									Namespace: "default",
+									Annotations: map[string]string{
+										"kubernetes.io/elb.id": "8f4cf216-a659-40dc-8c77-6068b036ba56",
+									},
+								},
+								Spec: corev1.ServiceSpec{
+									Ports: []corev1.ServicePort{
+										{
+											Name:       "80-tcp",
+											Protocol:   corev1.ProtocolTCP,
+											Port:       500,
+											TargetPort: intstr.FromInt(80),
+											NodePort:   31749,
+										},
+									},
+									Type: corev1.ServiceTypeLoadBalancer,
+								},
+							},
+						},
+					}
+				}).Return(nil)
+			},
+			want: &ElbPlugin{
+				maxPort:     503,
+				minPort:     500,
+				blockPorts:  []int32{501},
+				cache:       map[string]portAllocated{"8f4cf216-a659-40dc-8c77-6068b036ba56": map[int32]bool{500: true, 501: true, 502: false, 503: false}},
+				podAllocate: map[string]string{"default/test-pod-0": "8f4cf216-a659-40dc-8c77-6068b036ba56:500"},
+				mutex:       sync.RWMutex{},
+			},
+			wantErr: assert.NoError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &ElbPlugin{
+				maxPort:     tt.fields.maxPort,
+				minPort:     tt.fields.minPort,
+				blockPorts:  tt.fields.blockPorts,
+				cache:       tt.fields.cache,
+				podAllocate: tt.fields.podAllocate,
+				mutex:       tt.fields.mutex,
+			}
+			clientMock := new(MockClient)
+			tt.args.c = clientMock
+			if tt.setup != nil {
+				tt.setup(clientMock)
+			}
+			tt.wantErr(t, s.Init(tt.args.c, tt.args.options, tt.args.ctx), fmt.Sprintf("Init(%v, %v, %v)", tt.args.c, tt.args.options, tt.args.ctx))
+			assert.Equal(t, s.cache, tt.want.cache)
+			assert.Equal(t, s.podAllocate, tt.want.podAllocate)
+			assert.Equal(t, s.minPort, tt.want.minPort)
+			assert.Equal(t, s.maxPort, tt.want.maxPort)
+			assert.Equal(t, s.blockPorts, tt.want.blockPorts)
+		})
+	}
+}
+
+func TestElbPlugin_updateCachesAfterAutoCreateElb(t *testing.T) {
+	type fields struct {
+		maxPort     int32
+		minPort     int32
+		blockPorts  []int32
+		cache       map[string]portAllocated
+		podAllocate map[string]string
+		mutex       sync.RWMutex
+	}
+	type args struct {
+		c            client.Client
+		name         string
+		namespace    string
+		interval     time.Duration
+		totalTimeout time.Duration
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		setup  func(clientMock *MockClient)
+		want   ElbPlugin
+	}{
+		{
+			name: "success",
+			fields: fields{
+				minPort:    500,
+				maxPort:    502,
+				blockPorts: []int32{501},
+				mutex:      sync.RWMutex{},
+			},
+			args: args{
+				name:         "test-pod-0",
+				namespace:    "default",
+				interval:     1 * time.Second,
+				totalTimeout: 2 * time.Second,
+			},
+			setup: func(clientMock *MockClient) {
+				clientMock.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+					service := args[2].(*corev1.Service)
+					*service = corev1.Service{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-pod-0",
+							Namespace: "default",
+							Annotations: map[string]string{
+								"kubernetes.io/elb.id": "8f4cf216-a659-40dc-8c77-6068b036ba56",
+							},
+						},
+						Spec: corev1.ServiceSpec{
+							Ports: []corev1.ServicePort{
+								{
+									Name:       "80-tcp",
+									Protocol:   corev1.ProtocolTCP,
+									Port:       500,
+									TargetPort: intstr.FromInt(80),
+									NodePort:   31749,
+								},
+							},
+						},
+					}
+				}).Return(nil)
+			},
+			want: ElbPlugin{
+				cache:       map[string]portAllocated{"8f4cf216-a659-40dc-8c77-6068b036ba56": map[int32]bool{500: true, 501: true, 502: false}},
+				podAllocate: map[string]string{"default/test-pod-0": "8f4cf216-a659-40dc-8c77-6068b036ba56:500"},
+			},
+		},
+		{
+			name: "timeout",
+			fields: fields{
+				minPort:    500,
+				maxPort:    502,
+				blockPorts: []int32{501},
+				mutex:      sync.RWMutex{},
+			},
+			args: args{
+				name:         "test-pod-0",
+				namespace:    "default",
+				interval:     1 * time.Second,
+				totalTimeout: 2 * time.Second,
+			},
+			setup: func(clientMock *MockClient) {
+				clientMock.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("some error"))
+			},
+			want: ElbPlugin{
+				cache:       nil,
+				podAllocate: nil,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clientMock := new(MockClient)
+			tt.args.c = clientMock
+			if tt.setup != nil {
+				tt.setup(clientMock)
+			}
+			s := &ElbPlugin{
+				maxPort:     tt.fields.maxPort,
+				minPort:     tt.fields.minPort,
+				blockPorts:  tt.fields.blockPorts,
+				cache:       tt.fields.cache,
+				podAllocate: tt.fields.podAllocate,
+				mutex:       tt.fields.mutex,
+			}
+			s.updateCachesAfterAutoCreateElb(tt.args.c, tt.args.name, tt.args.namespace, tt.args.interval, tt.args.totalTimeout)
+			assert.Equal(t, s.cache, tt.want.cache)
+			assert.Equal(t, s.podAllocate, tt.want.podAllocate)
+		})
+	}
+}
+
+func TestElbPlugin_OnPodDeleted(t *testing.T) {
+	podForTest := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod-0",
+			Namespace: "default",
+			Annotations: map[string]string{
+				"kubernetes.io/elb.id":          "8f4cf216-a659-40dc-8c77-6068b036ba56",
+				"game.kruise.io/network-conf":   `[{"name":"PortProtocols","value":"80/TCP"},{"name":"kubernetes.io/elb.class","value":"performance"},{"name":"kubernetes.io/elb.id","value":"8f4cf216-a659-40dc-8c77-6068b036ba56"}]`,
+				"game.kruise.io/network-type":   "HwCloud-ELB",
+				"game.kruise.io/network-status": `{"internalAddresses":[{"ip":"192.168.1.219","ports":[{"name":"80","protocol":"TCP","port":80}]}],"externalAddresses":[{"ip":"159.138.146.2","ports":[{"name":"80","protocol":"TCP","port":500}]}],"currentNetworkState":"Ready","createTime":null,"lastTransitionTime":null}`,
+			},
+			Labels: map[string]string{
+				"game.kruise.io/owner-gss": "test-pod",
+			},
+		},
+	}
+	deleteTimetamp := metav1.NewTime(time.Now())
+	type fields struct {
+		maxPort     int32
+		minPort     int32
+		blockPorts  []int32
+		cache       map[string]portAllocated
+		podAllocate map[string]string
+		mutex       sync.RWMutex
+	}
+	type args struct {
+		c   client.Client
+		pod func(p *corev1.Pod) *corev1.Pod
+		ctx context.Context
+	}
+	tests := []struct {
+		name      string
+		fields    fields
+		args      args
+		setup     func(clientMock *MockClient)
+		want      ElbPlugin
+		wantError errors.PluginError
+	}{
+		{
+			name: "success",
+			fields: fields{
+				maxPort:     502,
+				minPort:     500,
+				blockPorts:  []int32{501},
+				cache:       map[string]portAllocated{"8f4cf216-a659-40dc-8c77-6068b036ba56": map[int32]bool{500: true, 501: true, 502: false}},
+				podAllocate: map[string]string{"default/test-pod-0": "8f4cf216-a659-40dc-8c77-6068b036ba56:500"},
+				mutex:       sync.RWMutex{},
+			},
+			args: args{
+				c: nil,
+				pod: func(p *corev1.Pod) *corev1.Pod {
+					return p.DeepCopy()
+				},
+				ctx: context.Background(),
+			},
+			want: ElbPlugin{
+				cache:       map[string]portAllocated{"8f4cf216-a659-40dc-8c77-6068b036ba56": map[int32]bool{500: false, 501: true, 502: false}},
+				podAllocate: map[string]string{},
+			},
+			wantError: nil,
+		},
+		{
+			name: "fixed, get gss failed",
+			fields: fields{
+				maxPort:     502,
+				minPort:     500,
+				blockPorts:  []int32{501},
+				cache:       map[string]portAllocated{"8f4cf216-a659-40dc-8c77-6068b036ba56": map[int32]bool{500: true, 501: true, 502: false}},
+				podAllocate: map[string]string{"default/test-pod-0": "8f4cf216-a659-40dc-8c77-6068b036ba56:500"},
+				mutex:       sync.RWMutex{},
+			},
+			args: args{
+				c: nil,
+				pod: func(p *corev1.Pod) *corev1.Pod {
+					res := p.DeepCopy()
+					res.Annotations["game.kruise.io/network-conf"] = `[{"name":"PortProtocols","value":"80/TCP"},{"name":"kubernetes.io/elb.class","value":"performance"},{"name":"kubernetes.io/elb.id","value":"8f4cf216-a659-40dc-8c77-6068b036ba56"}, {"name":"Fixed","value":"true"}]`
+					res.Labels["game.kruise.io/owner-gss"] = "test-pod"
+					return res
+				},
+				ctx: context.Background(),
+			},
+			setup: func(clientMock *MockClient) {
+				clientMock.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("some error"))
+			},
+			want: ElbPlugin{
+				cache:       map[string]portAllocated{"8f4cf216-a659-40dc-8c77-6068b036ba56": map[int32]bool{500: true, 501: true, 502: false}},
+				podAllocate: map[string]string{"default/test-pod-0": "8f4cf216-a659-40dc-8c77-6068b036ba56:500"},
+			},
+			wantError: errors.ToPluginError(fmt.Errorf("some error"), errors.ApiCallError),
+		},
+		{
+			name: "fixed, gss exists",
+			fields: fields{
+				maxPort:     502,
+				minPort:     500,
+				blockPorts:  []int32{501},
+				cache:       map[string]portAllocated{"8f4cf216-a659-40dc-8c77-6068b036ba56": map[int32]bool{500: true, 501: true, 502: false}},
+				podAllocate: map[string]string{"default/test-pod-0": "8f4cf216-a659-40dc-8c77-6068b036ba56:500"},
+				mutex:       sync.RWMutex{},
+			},
+			args: args{
+				c: nil,
+				pod: func(p *corev1.Pod) *corev1.Pod {
+					res := p.DeepCopy()
+					res.Annotations["game.kruise.io/network-conf"] = `[{"name":"PortProtocols","value":"80/TCP"},{"name":"kubernetes.io/elb.class","value":"performance"},{"name":"kubernetes.io/elb.id","value":"8f4cf216-a659-40dc-8c77-6068b036ba56"}, {"name":"Fixed","value":"true"}]`
+					res.Labels["game.kruise.io/owner-gss"] = "test-pod"
+					return res
+				},
+				ctx: context.Background(),
+			},
+			setup: func(clientMock *MockClient) {
+				clientMock.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+					gss := args[2].(*gamekruiseiov1alpha1.GameServerSet)
+					*gss = gamekruiseiov1alpha1.GameServerSet{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "test-pod",
+							Namespace:   "default",
+							Annotations: map[string]string{},
+						},
+					}
+				}).Return(nil)
+			},
+			want: ElbPlugin{
+				cache:       map[string]portAllocated{"8f4cf216-a659-40dc-8c77-6068b036ba56": map[int32]bool{500: true, 501: true, 502: false}},
+				podAllocate: map[string]string{"default/test-pod-0": "8f4cf216-a659-40dc-8c77-6068b036ba56:500"},
+			},
+			wantError: nil,
+		},
+		{
+			name: "fixed, gss deleted",
+			fields: fields{
+				maxPort:     502,
+				minPort:     500,
+				blockPorts:  []int32{501},
+				cache:       map[string]portAllocated{"8f4cf216-a659-40dc-8c77-6068b036ba56": map[int32]bool{500: true, 501: true, 502: false}},
+				podAllocate: map[string]string{"default/test-pod-0": "8f4cf216-a659-40dc-8c77-6068b036ba56:500"},
+				mutex:       sync.RWMutex{},
+			},
+			args: args{
+				c: nil,
+				pod: func(p *corev1.Pod) *corev1.Pod {
+					res := p.DeepCopy()
+					res.Annotations["game.kruise.io/network-conf"] = `[{"name":"PortProtocols","value":"80/TCP"},{"name":"kubernetes.io/elb.class","value":"performance"},{"name":"kubernetes.io/elb.id","value":"8f4cf216-a659-40dc-8c77-6068b036ba56"}, {"name":"Fixed","value":"true"}]`
+					res.Labels["game.kruise.io/owner-gss"] = "test-pod"
+					return res
+				},
+				ctx: context.Background(),
+			},
+			setup: func(clientMock *MockClient) {
+				clientMock.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+					gss := args[2].(*gamekruiseiov1alpha1.GameServerSet)
+					*gss = gamekruiseiov1alpha1.GameServerSet{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:              "test-pod",
+							Namespace:         "default",
+							Annotations:       map[string]string{},
+							DeletionTimestamp: &deleteTimetamp,
+						},
+					}
+				}).Return(nil)
+			},
+			want: ElbPlugin{
+				cache:       map[string]portAllocated{"8f4cf216-a659-40dc-8c77-6068b036ba56": map[int32]bool{500: false, 501: true, 502: false}},
+				podAllocate: map[string]string{},
+			},
+			wantError: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clientMock := new(MockClient)
+			tt.args.c = clientMock
+			if tt.setup != nil {
+				tt.setup(clientMock)
+			}
+			s := &ElbPlugin{
+				maxPort:     tt.fields.maxPort,
+				minPort:     tt.fields.minPort,
+				blockPorts:  tt.fields.blockPorts,
+				cache:       tt.fields.cache,
+				podAllocate: tt.fields.podAllocate,
+				mutex:       tt.fields.mutex,
+			}
+			assert.Equalf(t, tt.wantError, s.OnPodDeleted(tt.args.c, tt.args.pod(podForTest), tt.args.ctx), "OnPodDeleted(%v, %v, %v)", tt.args.c, tt.args.pod, tt.args.ctx)
+			assert.Equal(t, s.cache, tt.want.cache)
+			assert.Equal(t, s.podAllocate, tt.want.podAllocate)
+		})
+	}
+}
+
+func Test_getSvcOwnerReference(t *testing.T) {
+	type args struct {
+		c       client.Client
+		ctx     context.Context
+		pod     *corev1.Pod
+		isFixed bool
+	}
+	tests := []struct {
+		name  string
+		args  args
+		want  []metav1.OwnerReference
+		setup func(clientMock *MockClient)
+	}{
+		{
+			name: "fixed, success",
+			args: args{
+				c:   nil,
+				ctx: context.Background(),
+				pod: &corev1.Pod{
+					TypeMeta: metav1.TypeMeta{
+						Kind:       "Pod",
+						APIVersion: "v1",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-pod-0",
+						Namespace: "default",
+						UID:       "pod-uuid-xxxx",
+					},
+				},
+				isFixed: true,
+			},
+			setup: func(clientMock *MockClient) {
+				clientMock.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+					gss := args[2].(*gamekruiseiov1alpha1.GameServerSet)
+					*gss = gamekruiseiov1alpha1.GameServerSet{
+						TypeMeta: metav1.TypeMeta{
+							Kind:       "GameServerSet",
+							APIVersion: "game.kruise.io/v1alpha1",
+						},
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-pod",
+							Namespace: "default",
+							UID:       "gss-uuid-xxxx",
+						},
+					}
+				}).Return(nil)
+			},
+			want: []metav1.OwnerReference{
+				{
+					APIVersion:         "game.kruise.io/v1alpha1",
+					Kind:               "GameServerSet",
+					Name:               "test-pod",
+					UID:                "gss-uuid-xxxx",
+					Controller:         ptr.To[bool](true),
+					BlockOwnerDeletion: ptr.To[bool](true),
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		clientMock := new(MockClient)
+		tt.args.c = clientMock
+		if tt.setup != nil {
+			tt.setup(clientMock)
+		}
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equalf(t, tt.want, getSvcOwnerReference(tt.args.c, tt.args.ctx, tt.args.pod, tt.args.isFixed), "getSvcOwnerReference(%v, %v, %v, %v)", tt.args.c, tt.args.ctx, tt.args.pod, tt.args.isFixed)
+		})
+	}
+}
+
+func TestElbPlugin_getPortFromHead(t *testing.T) {
+	type fields struct {
+		maxPort     int32
+		minPort     int32
+		blockPorts  []int32
+		cache       map[string]portAllocated
+		podAllocate map[string]string
+		mutex       sync.RWMutex
+	}
+	type args struct {
+		num int
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   []int32
+	}{
+		{
+			name: "success",
+			fields: fields{
+				maxPort:    505,
+				minPort:    500,
+				blockPorts: []int32{501},
+			},
+			args: args{
+				num: 2,
+			},
+			want: []int32{500, 502},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &ElbPlugin{
+				maxPort:     tt.fields.maxPort,
+				minPort:     tt.fields.minPort,
+				blockPorts:  tt.fields.blockPorts,
+				cache:       tt.fields.cache,
+				podAllocate: tt.fields.podAllocate,
+				mutex:       tt.fields.mutex,
+			}
+			assert.Equalf(t, tt.want, s.getPortFromHead(tt.args.num), "getPortFromHead(%v)", tt.args.num)
 		})
 	}
 }
