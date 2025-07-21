@@ -1096,9 +1096,11 @@ HuaweiCloud
 #### Plugin description
 
 - HwCloud-ELB uses Huawei Cloud Load Balancer (ELB) as the entity for external service hosting. It distributes external traffic to multiple Pods within the cluster through Elastic Load Balancing (ELB), providing higher reliability compared to the NodePort type.
-
-- Documentation: https://support.huaweicloud.com/usermanual-cce/cce_10_0681.html
-  
+- Supported annotations, please refer to the documentation: https://support.huaweicloud.com/usermanual-cce/cce_10_0681.html
+- The exposed public network access port is consistent with the port being listened to in the container.
+- You can bind security groups for management ([Use annotations to bind security groups to Pods](https://support.huaweicloud.com/usermanual-cce/cce_10_0897.html)), which is only supported in CCE Turbo clusters.
+  - The network interface of the Pod uses the security group configured via the annotation: `yangtse.io/security-group-ids`. 
+  - The Pod's network interface will use the existing security groups and additionally include the security group configured via the annotation: `yangtse.io/additional-security-group-ids`.
 - Supports Network Isolation: Yes.
 
 #### Network parameters
@@ -1163,10 +1165,10 @@ spec:
     networkConf:
       - name: PortProtocols
         value: "80/TCP"
-      - name: kubernetes.io/elb.class # ELB实例的类型
+      - name: kubernetes.io/elb.class # The type of the ELB instance
         value: performance
-      - name: kubernetes.io/elb.id # ELB实例的ID
-        value: 8f4cf216-a659-40dc-8c77-6068b036ba56
+      - name: kubernetes.io/elb.id # The ID of the ELB instance
+        value: 8f4cf216-a659-40dc-8c77-xxxx
   gameServerTemplate:
     spec:
       containers:
@@ -1201,6 +1203,96 @@ kubectl get svc hw-elb-nginx-0
 NAME             TYPE           CLUSTER-IP       EXTERNAL-IP                   PORT(S)         AGE
 hw-elb-nginx-0   LoadBalancer   10.247.123.247   189.1.225.136,192.168.0.147   525:32400/TCP   13m
 ```
+---
+Automatically create an ELB and bind it to the created pod.
+```yaml
+apiVersion: game.kruise.io/v1alpha1
+kind: GameServerSet
+metadata:
+  name: hw-elb-auto-performance
+  namespace: kruise-game-system
+spec:
+  replicas: 1
+  updateStrategy:
+    rollingUpdate:
+      podUpdatePolicy: InPlaceIfPossible
+  network:
+    networkType: HwCloud-ELB
+    networkConf:
+      - name: PortProtocols
+        value: "80/TCP"
+      - name: kubernetes.io/elb.class
+        value: performance # The type of the ELB instance.
+      - name: kubernetes.io/elb.autocreate # Options for automatically creating an ELB: https://support.huaweicloud.com/usermanual-cce/cce_10_0385.html#section21
+        value: '{
+                  "type": "public",
+                  "bandwidth_name": "bandwidth-xxxx",
+                  "bandwidth_chargemode": "traffic",
+                  "bandwidth_size": 5,
+                  "bandwidth_sharetype": "PER",
+                  "eip_type": "5_bgp",
+                  "available_zone": [
+                     "ap-southeast-1a",
+                     "ap-southeast-1b"
+                  ],
+                  "l4_flavor_name": "L4_flavor.elb.s1.small"
+                }'
+      - name: kubernetes.io/elb.enterpriseID # The enterprise project ID to which the created load balancer belongs.
+        value: 'aff97261-4dbd-4593-8236-xxxx'
+      - name: kubernetes.io/elb.lb-algorithm
+        value: ROUND_ROBIN # Load balancer algorithm
+  gameServerTemplate:
+    spec:
+      containers:
+        - image: nginx
+          name: nginx
+         
+```
+The generated gameserver hw-elb-nginx-0 networkStatus field is shown below:
+```yaml
+ networkStatus:
+    createTime: "2025-07-18T08:26:53Z"
+    currentNetworkState: Ready
+    desiredNetworkState: Ready
+    externalAddresses:
+    - ip: 159.138.146.2
+      ports:
+      - name: "80"
+        port: 500
+        protocol: TCP
+    internalAddresses:
+    - ip: 192.168.1.219
+      ports:
+      - name: "80"
+        port: 80
+        protocol: TCP
+    lastTransitionTime: "2025-07-18T08:26:53Z"
+    networkType: HwCloud-ELB
+```
+The generated svc is as follows:
+```bash
+kubectl get svc hw-elb-auto-performance-0
+NAME                        TYPE           CLUSTER-IP       EXTERNAL-IP                   PORT(S)         AGE
+hw-elb-auto-performance-0   LoadBalancer   10.247.255.191   159.138.146.2,192.168.1.102   500:30744/TCP   18m
+```
+You can see the ID of the newly created ELB in the svc, and the corresponding ELB can be viewed in the ELB console of Huawei Cloud.
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    game.kruise.io/network-config-hash: "1740123090"
+    kubernetes.io/elb.autocreate: '{ "type": "public", "bandwidth_name": "bandwidth-89f0",
+      "bandwidth_chargemode": "traffic", "bandwidth_size": 5, "bandwidth_sharetype":
+      "PER", "eip_type": "5_bgp", "available_zone": [ "ap-southeast-1a", "ap-southeast-1b"
+      ], "l4_flavor_name": "L4_flavor.elb.s1.small" }'
+    kubernetes.io/elb.class: performance
+    kubernetes.io/elb.eip-id: b925fbd2-54ad-421c-8a2e-xxxx
+    kubernetes.io/elb.enterpriseID: aff97261-4dbd-4593-8236-xxxx
+    kubernetes.io/elb.id: d28f15bc-9e75-48eb-9b68-xxx
+    kubernetes.io/elb.lb-algorithm: ROUND_ROBIN
+    kubernetes.io/elb.mark: "0"
+```
 
 #### Plugin Name
 
@@ -1211,12 +1303,12 @@ hw-elb-nginx-0   LoadBalancer   10.247.123.247   189.1.225.136,192.168.0.147   5
 HuaweiCloud
 
 #### Plugin Description
-
-• Assigns a separate Elastic IP (EIP) to each pod.
-
-• The exposed public access port is identical to the port monitored within the container, managed through security groups.
-
-• Only supported in CCE Turbo clusters: https://support.huaweicloud.com/usermanual-cce/cce_10_0284.html#section1
+- Only Huawei Cloud `CCE Turbo` clusters are supported: https://support.huaweicloud.com/usermanual-cce/cce_10_0284.html#section1
+- Assigns a separate Elastic IP (EIP) to each pod.
+- The exposed public network access port is consistent with the port being listened to in the container. Security groups can be bound for management ([Binding Security Groups to Pods Using Annotations](https://support.huaweicloud.com/usermanual-cce/cce_10_0897.html))
+  - The Pod's network interface uses the security group configured via the annotation: `yangtse.io/security-group-ids`.
+  - The Pod's network interface will use the existing security groups while additionally applying the security group configured via the annotation: `yangtse.io/additional-security-group-ids`
+- The automatically created EIP does not support specifying the 'enterprise project' during creation.
 
 #### Network Parameters
 
@@ -1229,7 +1321,7 @@ None
 #### Example
 
 Exclusive Bandwidth EIP Created with Pod  
-For other available annotations, refer to Huawei Cloud documentation.  
+Note: The EIP created here belongs to the default enterprise project. Huawei Cloud currently does not support specifying enterprise projects in this mode.  
 ```yaml
 apiVersion: game.kruise.io/v1alpha1
 kind: GameServerSet
@@ -1282,6 +1374,50 @@ metadata:
     yangtse.io/eip-charge-mode: traffic
     yangtse.io/eip-network-type: 5_bgp
     yangtse.io/pod-with-eip: "true"
+```
+To use an existing EIP, add yangtse.io/eip-id in spec.network.networkConf. You need to create the EIP in Huawei Cloud in advance.
+```yaml
+apiVersion: game.kruise.io/v1alpha1
+kind: GameServerSet
+metadata:
+  name: gs-eip-exist
+  namespace: kruise-game-system
+spec:
+  replicas: 1
+  updateStrategy:
+    rollingUpdate:
+      podUpdatePolicy: InPlaceIfPossible
+  network:
+    networkType: HwCloud-EIP
+    networkConf:
+      - name: yangtse.io/eip-id
+        value: "7ec474aa-3bd9-46a2-a45c-1ba70c6230cc" # Use an existing EIP.
+  gameServerTemplate:
+    spec:
+      containers:
+        - image: nginx
+          name: nginx
+```
+In the pod's YAML, you can see that the yangtse.io/allocated-eip-id in the pod's annotations corresponds to the EIP we specified. 
+By logging into the Huawei Cloud EIP console, you can verify that this EIP is already bound to the pod.
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    apps.kruise.io/runtime-containers-meta: '{"containers":[{"name":"nginx","containerID":"containerd://0fc9de69e30b48cf13ad2d2c6f5fe3be86e48e922a982dbb77b53ffd0ca6f54b","restartCount":0,"hashes":{"plainHash":2957831032,"plainHashWithoutResources":0,"extractedEnvFromMetadataHash":86995377}}]}'
+    game.kruise.io/network-conf: '[{"name":"yangtse.io/eip-id","value":"7ec474aa-3bd9-46a2-a45c-1ba70c6230cc"}]'
+    game.kruise.io/network-status: '{"currentNetworkState":"Ready","createTime":null,"lastTransitionTime":null}'
+    game.kruise.io/network-trigger-time: "2025-07-18 15:38:21"
+    game.kruise.io/network-type: HwCloud-EIP
+    game.kruise.io/opsState-last-changed-time: "2025-07-18 15:38:21"
+    game.kruise.io/state-last-changed-time: "2025-07-18 15:38:31"
+    lifecycle.apps.kruise.io/timestamp: "2025-07-18T07:38:13Z"
+    yangtse.io/allocated-eip-id: 7ec474aa-3bd9-46a2-a45c-1ba70c6230cc
+    yangtse.io/allocated-ipv4-eip: 159.138.21.92
+    yangtse.io/eip-id: 7ec474aa-3bd9-46a2-a45c-1ba70c6230cc
+  creationTimestamp: "2025-07-18T07:38:14Z
+# other info ignored
 ```
 ### Volcengine-EIP
 
