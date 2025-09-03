@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: only-svc-performance
+  namespace: kruise-game-system
+  annotations:
+    kubernetes.io/elb.id: 4d873946-156b-44b2-a9fd-31de3d5f050b                         # ELB ID，替换为实际值
+    kubernetes.io/elb.class: performance                        # 负载均衡器类型
+    kubernetes.io/elb.lb-algorithm: ROUND_ROBIN                   # 负载均衡器算法
+spec:
+  selector:
+    app: nginx
+  ports:
+    - name: service0
+      port: 9989
+      protocol: TCP
+      targetPort: 80
+  type: LoadBalancer

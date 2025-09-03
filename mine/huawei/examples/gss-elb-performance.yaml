@@ -5,7 +5,7 @@ metadata:
   name: gs-elb-performance-2
   namespace: kruise-game-system
 spec:
-  replicas: 2
+  replicas: 1
   updateStrategy:
     rollingUpdate:
       podUpdatePolicy: InPlaceIfPossible
@@ -17,7 +17,7 @@ spec:
       - name: kubernetes.io/elb.class
         value: performance
       - name: kubernetes.io/elb.id
-        value: 8f4cf216-a659-40dc-8c77-6068b036ba56
+        value: 4d873946-156b-44b2-a9fd-31de3d5f050b
       - name: kubernetes.io/elb.connection-drain-enable
         value: "true"
       # 如果指定了kubernetes.io/elb.connection-drain-enable, 就必须指定下面的
