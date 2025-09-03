@@ -1,0 +1,25 @@
+# 使用共享带宽, 需要在公网访问->共享带宽里购买
+apiVersion: game.kruise.io/v1alpha1
+kind: GameServerSet
+metadata:
+  name: gs-eip-union
+  namespace: kruise-game-system
+spec:
+  replicas: 1
+  updateStrategy:
+    rollingUpdate:
+      podUpdatePolicy: InPlaceIfPossible
+  network:
+    networkType: HwCloud-EIP
+    networkConf:
+      - name: yangtse.io/pod-with-eip
+        value: "true"
+      - name: yangtse.io/eip-network-type
+        value: "5_bgp"
+      - name: yangtse.io/eip-bandwidth-id
+        value: "caa6e487-9042-4997-90cb-865a5e2b1449" # 共享带宽ID
+  gameServerTemplate:
+    spec:
+      containers:
+        - image: nginx
+          name: nginx

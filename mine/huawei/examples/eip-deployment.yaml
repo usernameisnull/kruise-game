@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eip-nginx-example
+  namespace: kruise-game-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+      annotations:
+        yangtse.io/pod-with-eip: "true"  # EIP跟随Pod创建
+        yangtse.io/eip-bandwidth-size: "5"   # EIP带宽
+        yangtse.io/eip-network-type: 5_bgp  # EIP类型
+        yangtse.io/eip-charge-mode: traffic  # EIP计费模式
+        yangtse.io/eip-bandwidth-name: daocloud-mabing-test0714  # 可选：EIP带宽名称
+    spec:
+      containers:
+        - name: container-0
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+          resources:
+            limits:
+              cpu: 100m
+              memory: 200Mi
+            requests:
+              cpu: 100m
+              memory: 200Mi
+      imagePullSecrets:
+        - name: default-secret

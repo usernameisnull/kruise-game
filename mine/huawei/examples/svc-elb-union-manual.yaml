@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    kubernetes.io/elb.class: union
+#    kubernetes.io/elb.id: f99603a9-149a-4e60-8df5-61d05026184f
+    kubernetes.io/elb.id: b72a251d-c090-4ccc-9073-7fcfa6ecebaf
+    kubernetes.io/elb.lb-algorithm: ROUND_ROBIN
+  labels:
+    statefulset.kubernetes.io/pod-name: gs-elb-performance-0
+  name: nginx-union-manual
+  namespace: kruise-game-system
+spec:
+  ports:
+    - name: service0
+      port: 899
+      protocol: TCP
+      targetPort: 80
+  selector:
+    statefulset.kubernetes.io/pod-name: gs-elb-performance-0
+  type: LoadBalancer

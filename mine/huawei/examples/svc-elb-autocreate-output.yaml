@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","kind":"Service","metadata":{"annotations":{"kubernetes.io/elb.autocreate":"{ \"type\": \"public\", \"bandwidth_name\": \"bandwidth-89f0\", \"bandwidth_chargemode\": \"traffic\", \"bandwidth_size\": 5, \"bandwidth_sharetype\": \"PER\", \"eip_type\": \"5_bgp\", \"available_zone\": [ \"ap-southeast-1a\", \"ap-southeast-1b\" ], \"l4_flavor_name\": \"L4_flavor.elb.s1.small\" }","kubernetes.io/elb.class":"performance","kubernetes.io/elb.enterpriseID":"aff97261-4dbd-4593-8236-d7a5daf6a943","kubernetes.io/elb.lb-algorithm":"ROUND_ROBIN"},"labels":{"statefulset.kubernetes.io/pod-name":"gs-elb-performance-0"},"name":"nginx-autocreate","namespace":"kruise-game-system"},"spec":{"ports":[{"name":"service0","port":80,"protocol":"TCP","targetPort":80}],"selector":{"statefulset.kubernetes.io/pod-name":"gs-elb-performance-0"},"type":"LoadBalancer"}}
+    kubernetes.io/elb.autocreate: '{ "type": "public", "bandwidth_name": "bandwidth-89f0",
+      "bandwidth_chargemode": "traffic", "bandwidth_size": 5, "bandwidth_sharetype":
+      "PER", "eip_type": "5_bgp", "available_zone": [ "ap-southeast-1a", "ap-southeast-1b"
+      ], "l4_flavor_name": "L4_flavor.elb.s1.small" }'
+    kubernetes.io/elb.class: performance
+    kubernetes.io/elb.eip-id: d1779912-0f38-49f4-ab3e-24b7dfe8c114
+    kubernetes.io/elb.enterpriseID: aff97261-4dbd-4593-8236-d7a5daf6a943
+    kubernetes.io/elb.id: 2c64205c-4169-42f9-918f-66854bbc3f08
+    kubernetes.io/elb.lb-algorithm: ROUND_ROBIN
+    kubernetes.io/elb.mark: "0"
+  creationTimestamp: "2025-07-12T10:08:14Z"
+  finalizers:
+    - service.kubernetes.io/load-balancer-cleanup
+  labels:
+    statefulset.kubernetes.io/pod-name: gs-elb-performance-0
+  name: nginx-autocreate
+  namespace: kruise-game-system
+  resourceVersion: "7347276"
+  uid: d90bad6e-1aeb-4213-a39e-1d5924a04d9d
+spec:
+  allocateLoadBalancerNodePorts: true
+  clusterIP: 10.247.100.216
+  clusterIPs:
+    - 10.247.100.216
+  externalTrafficPolicy: Cluster
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+    - IPv4
+  ipFamilyPolicy: SingleStack
+  loadBalancerIP: 159.138.21.92
+  ports:
+    - name: service0
+      nodePort: 31825
+      port: 80
+      protocol: TCP
+      targetPort: 80
+  selector:
+    statefulset.kubernetes.io/pod-name: gs-elb-performance-0
+  sessionAffinity: None
+  type: LoadBalancer
+status:
+  loadBalancer:
+    ingress:
+      - ip: 159.138.21.92
+      - ip: 192.168.1.140

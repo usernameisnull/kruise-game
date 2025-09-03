@@ -1,0 +1,59 @@
+apiVersion: game.kruise.io/v1alpha1
+kind: GameServerSet
+metadata:
+  name: hw-cce-elb-auto-union
+  namespace: kruise-game-system
+spec:
+  replicas: 1
+  updateStrategy:
+    rollingUpdate:
+      podUpdatePolicy: InPlaceIfPossible
+  network:
+    networkType: HwCloud-CCE-ELB
+    networkConf:
+      - name: PortProtocols
+        value: "80/TCP"
+      - name: kubernetes.io/elb.class
+        value: union
+#        value: union
+      - name: kubernetes.io/elb.autocreate
+        value: '{
+                  "type": "public",
+                  "bandwidth_name": "bandwidth-89f0",
+                  "bandwidth_chargemode": "traffic",
+                  "bandwidth_size": 5,
+                  "bandwidth_sharetype": "PER",
+                  "eip_type": "5_bgp",
+                  "available_zone": [
+                     "ap-southeast-1a",
+                     "ap-southeast-1b"
+                  ],
+                  "l4_flavor_name": "L4_flavor.elb.s1.small"
+                }'
+      - name: kubernetes.io/elb.enterpriseID # 负载均衡所属企业项目ID
+        value: 'aff97261-4dbd-4593-8236-d7a5daf6a943'
+      - name: kubernetes.io/elb.lb-algorithm
+        value: ROUND_ROBIN
+  gameServerTemplate:
+    spec:
+      containers:
+        #        - image: registry.cn-hangzhou.aliyuncs.com/gs-demo/gameserver:network
+        - image: nginx
+          name: nginx
+          ports:
+            - containerPort: 80
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          volumeMounts:
+            - name: nginx-html
+              mountPath: /usr/share/nginx/html
+          lifecycle:
+            postStart:
+              exec:
+                command: [ "/bin/sh", "-c", "echo \"<html><body><h1>Welcome to $POD_NAME</h1></body></html>\" > /usr/share/nginx/html/index.html" ]
+      volumes:
+        - name: nginx-html
+          emptyDir: { }

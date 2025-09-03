@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: static-sts-nginx
+spec:
+  serviceName: nginx
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+      annotations:
+        yangtse.io/static-eip: 'true'   # Pod固定EIP
+        yangtse.io/static-eip-expire-no-cascading: 'false'   # EIP级联删除
+        yangtse.io/static-eip-expire-duration: 5m   # 固定EIP过期回收的时间间隔
+        yangtse.io/pod-with-eip: 'true'    # EIP跟随Pod创建
+        yangtse.io/eip-bandwidth-size: '5'    # EIP带宽
+        yangtse.io/eip-network-type: 5_bgp    # EIP类型
+        yangtse.io/eip-charge-mode: traffic    # EIP计费模式
+    spec:
+      containers:
+        - name: container-0
+          image: nginx:alpine
+          resources:
+            limits:
+              cpu: 100m
+              memory: 200Mi
+            requests:
+              cpu: 100m
+              memory: 200Mi
+      imagePullSecrets:
+        - name: default-secret

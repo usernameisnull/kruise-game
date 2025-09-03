@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    game.kruise.io/network-config-hash: "1234914076"
+    kubernetes.io/elb.class: performance
+    kubernetes.io/elb.connection-drain-enable: "true"
+    kubernetes.io/elb.connection-drain-timeout: "300"
+    kubernetes.io/elb.id: 8f4cf216-a659-40dc-8c77-6068b036ba56
+    kubernetes.io/elb.mark: "0"
+  creationTimestamp: "2025-07-17T08:22:06Z"
+  finalizers:
+  - service.kubernetes.io/load-balancer-cleanup
+  name: gs-elb-performance-2-0
+  namespace: kruise-game-system
+  ownerReferences:
+  - apiVersion: v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Pod
+    name: gs-elb-performance-2-0
+    uid: 53cb0992-c720-4ae4-9af9-3cc7e2bf3660
+  resourceVersion: "9867633"
+  uid: eccc0de3-ea09-4554-8710-4319eb551237
+spec:
+  allocateLoadBalancerNodePorts: true
+  clusterIP: 10.247.83.164
+  clusterIPs:
+  - 10.247.83.164
+  externalTrafficPolicy: Cluster
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  loadBalancerIP: 192.168.0.147
+  ports:
+  - name: 80-tcp
+    nodePort: 31749
+    port: 500
+    protocol: TCP
+    targetPort: 80
+  selector:
+    statefulset.kubernetes.io/pod-name: gs-elb-performance-2-0
+  sessionAffinity: None
+  type: LoadBalancer
+status:
+  loadBalancer:
+    ingress:
+    - ip: 192.168.0.147
+    - ip: 189.1.225.136

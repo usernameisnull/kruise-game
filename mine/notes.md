@@ -128,14 +128,23 @@ go run main.go \
 ### 使用ktctl
 - 8080:8080, 第一个是本地的,需要先在本地启动main.go, 第二个是远端的TargetPort,不是get svc看到的port  
   ```
-  ktctl -c /root/.kube/configs/config.cce.yaml -n kruise-game-system exchange kruise-game-controller-manager-metrics-service --expose 8080:8080
-
-  ktctl -c /root/.kube/configs/config.cce.yaml -n kruise-game-system exchange kruise-game-external-scaler  --expose 6000:6000
-
-  ktctl -c /root/.kube/configs/config.cce.yaml -n kruise-game-system exchange kruise-game-webhook-service   --expose 9876:9876
+    ktctl -c /root/.kube/configs/config.cce.yaml -n kruise-game-system exchange kruise-game-controller-manager-metrics-service --expose 8080:8080
+    
+    ktctl -c /root/.kube/configs/config.cce.yaml -n kruise-game-system exchange kruise-game-external-scaler  --expose 6000:6000
+    
+    ktctl -c /root/.kube/configs/config.cce.yaml -n kruise-game-system exchange kruise-game-webhook-service   --expose 9876:9876
   ```
-- `kruise-game-controller-manager-metrics-service`的`targetPort`是字符串`https`,需要到pod里去查看, 如果你把pod所在的Deployment的replicas scale到0,那么
-ktctl会报找不到这个端口, 你可以在本地让ktctl起来后,再scale 到 0.
+#### 错误一
+`kruise-game-controller-manager-metrics-service`的`targetPort`是字符串`https`,需要到pod里去查看, 如果你把pod所在的Deployment的replicas scale到0,那么
+ktctl会报找不到这个端口, 你可以在本地让ktctl起来后,再scale 到 0.  
+
+#### 错误二
+```text
+root in 󱃾 cce(kruise-game-system) mine/huawei/examples on  notes [✘!?] 
+❯ k apply -f elb-union.yaml
+Error from server (InternalError): error when creating "elb-union.yaml": Internal error occurred: failed calling webhook "kruise-game-webhook-service.kruise-game-system.svc": failed to call webhook: Post "https://kruise-game-webhook-service.kruise-game-system.svc:443/validate-v1alpha1-gss?timeout=10s": tls: failed to verify certificate: x509: certificate signed by unknown authority (possibly because of "crypto/rsa: verification error" while trying to verify candidate authority certificate "webhook-cert-ca")
+```
+应该是你在本地正确启动ktctl之前就启动了应用程序, 导致webhook验证失败  
 
 ## 与openkruise的关联在哪里?
 调了api: `github.com/openkruise/kruise-api`
@@ -382,4 +391,114 @@ Events:
 union错误:  
 ```text
  Warning  UpdateLoadBalancerFailed  11s (x4 over 25s)  hws-cloudprovider   Details: Update member of listener/pool(53e79f61-253b-4e90-b98e-f61d12fee25f/e6aab5d6-3984-4bcf-83ba-6a54b44aba26) error: Failed to create member : {"error":{"message":"Vpc aacb184e-ba7e-4046-bb33-ccac42c30164 of member's subnet_cidr 8459a9bc-180d-403e-a622-d489e74c7c5b and vpc 427d9606-bfae-4508-95ea-9ff4e6804478 of loadbalancer debd5c46-9ce5-44fc-ba07-4e911ad1ae36 mismatch","code":"ELB.9899"}}, status code: 400
+```
+
+## NetworkNotReady
+Golang代码里需要这一句,不然gs状态一直不能更改  
+svcAnnotations[ElbConfigHashKey] = util.GetHash(sc)  
+
+## CCE的vpc需要和ELB的vpc一致
+不然在CCE里用annotation绑定ELB会失败
+
+## 共享ELB用annotation绑定svc
+EXTERNAL IP没有使用ELB的公网IP,而是使用ELB的内网IP  
+ELB的id填错了,填成独占ELB的id了, 或者这个ELB id压根就不存在  
+
+## EIP
+### 对标阿里的哪个产品
+EIP
+
+### ELB没有svc(svc没有创建出来)
+只是在pod上体现
+```
+I0717 16:13:58.232782 2438837 gameserverset_manager.go:110] GameServerSet kruise-game-system/gs-elb-performance-2 will kill 0 GameServers
+I0717 16:13:59.392975 2438837 gameserverset_manager.go:110] GameServerSet kruise-game-system/gs-elb-performance-2 will kill 0 GameServers
+I0717 16:14:02.220023 2438837 gameserver_manager.go:317] GameServer kruise-game-system/gs-elb-performance-2-0 DesiredNetworkState: Ready CurrentNetworkState: . 56.77998548s remaining
+```
+莫名其妙的没有第二次触发`func (s *ElbPlugin) OnPodUpdated`, `gameserver_manager.go:317`这里的代码问题?  
+https://github.com/openkruise/kruise-game/blob/1e495b94fb93d65311994f65a88dd178fa7aa038/pkg/controllers/gameserver/gameserver_controller.go#L277 这里没有触发`func (s *ElbPlugin) OnPodUpdated`  
+解决办法: 更改pod的`lifecycle.apps.kruise.io/timestamp`这个annotation  
+
+## 填写bool类型为true报错
+改为"true"
+```text
+The GameServerSet "gs-elb-performance" is invalid: spec.network.networkConf[3].value: Invalid value: "boolean": spec.network.networkConf[3].value in body must be of type string: "boolean"
+```
+## 在gss上添加了annotation后
+最终反应到了svc上, 符合预期
+
+## 每个pod对应一个servcie
+每个service都可以通过公网访问, 符合预期
+
+## fixed ip和网络隔离
+https://github.com/openkruise/kruise-game/issues/20  
+
+## autocreate的时候报错
+```text
+2025-07-11T17:07:23+08:00	ERROR	Reconciler error	{"controller": "gameserver-controller", "object": {"name":"gs-elb-auto-performance-0","namespace":"kruise-game-system"}, "namespace": "kruise-game-system", "name": "gs-elb-auto-performance-0", "reconcileID": "ada3c25a-3d78-409c-935c-b5d65b2fbe84", "error": "admission webhook \"kruise-game-webhook-service.kruise-game-system.svc\" denied the request: there are no avaialable ports for []"}
+```
+
+## newCache/newPodAllocate的数据结构
+在初始化插件和每次创建pod和删除pod的时候都会更新newPodAllocate,newCache
+### cache
+一个map  
+key: elb的Id  
+value: map[int32]bool, int32是端口, bool表示是否被占用, false表示没有被占用, true表示被占用blockPorts始终是true  
+### podAllocate
+一个map  
+key: 命名空间/svc名字(pod名字, 因为2者是一样的)  
+value: string, "elb的Id:已经使用的端口号1,已经使用的端口号2,"
+```text
+I0712 17:28:45.522083  159454 elb.go:102] [HwCloud-ELB] podAllocate cache complete initialization: map[kruise-game-system/gs-elb-performance-0:8f4cf216-a659-40dc-8c77-6068b036ba56:594 kruise-game-system/gs-elb-performance-1:8f4cf216-a659-40dc-8c77-6068b036ba56:517 kruise-game-system/gs-elb-union-0:c1d8f4c6-7aef-4596-8c7c-2de87ff89545:675 kruise-game-system/gs-elb-union-1:c1d8f4c6-7aef-4596-8c7c-2de87ff89545:639]
+
+```
+## 如何获取当前账号的可用地区
+available_zone  
+可以在elb的列表页面F12查看返回获取  
+
+## auto create elb
+原始文件: `mine/huawei/examples/svc-elb-autocreate.yaml`  
+会自动添加如下annotations  
+```text
+    kubernetes.io/elb.eip-id: d1779912-0f38-49f4-ab3e-24b7dfe8c114
+    kubernetes.io/elb.enterpriseID: aff97261-4dbd-4593-8236-d7a5daf6a943
+    kubernetes.io/elb.id: 2c64205c-4169-42f9-918f-66854bbc3f08
+```
+![auto-create-svc-result.png](auto-create-svc-result.png)
+如果是独占型的, 删除这个svc后, 会自动删除ELB和EIP       
+如果是union类型的，删除了所有svc, 会自动删除ELB和EIP    
+
+## there are no avaliable ports for []
+文件： gss-elb-performance-autocreate.yaml  
+在 `case ElbAutocreateAnnotationKey`没有加到hwOption里
+```text
+2025-07-14T11:42:59+08:00	ERROR	Reconciler error	{"controller": "gameserver-controller", "object": {"name":"gs-elb-auto-performance-1","namespace":"kruise-game-system"}, "namespace": "kruise-game-system", "name": "gs-elb-auto-performance-1", "reconcileID": "126d1aaa-fa6e-446e-ba90-7c369926c246", "error": "admission webhook \"kruise-game-webhook-service.kruise-game-system.svc\" denied the request: there are no avaliable ports for []"}
+
+```
+
+## 固定eip
+是否开启Pod固定EIP，只有StatefulSet类型的Pod或`无ownerReferences`的Pod支持，默认不开启。  
+https://support.huaweicloud.com/usermanual-cce/cce_10_0651.html#section2
+
+## 测试指定package/文件的ut覆盖率
+进入这个package的目录   
+```
+root in kruise-game/cloudprovider/hwcloud on  simplize-huawei-elb [!] via 🐹 v1.23.3 
+➜ go test -coverprofile=coverage.out .
+ok      github.com/openkruise/kruise-game/cloudprovider/hwcloud 0.022s  coverage: 38.0% of statements
+
+root in kruise-game/cloudprovider/hwcloud on  simplize-huawei-elb [!] via 🐹 v1.23.3 took 26s 
+➜ pwd
+/root/huawei/openkruise/kruise-game/cloudprovider/hwcloud
+
+# 生成可读性更高的html报告
+root in kruise-game/cloudprovider/hwcloud on  simplize-huawei-elb via 🐹 v1.23.3 took 2s 
+➜ go tool cover -html=coverage.out -o coverage.html
+
+```
+
+## elb.connection-drain-enable
+如果指定了`kubernetes.io/elb.connection-drain-enable`, 就必须指定`kubernetes.io/elb.connection-drain-timeout`
+```
+Warning  CreateLoadBalancerFailed  30s                hws-cloudprovider   Details: Create pool of listener(bdefe366-d4e4-41ce-bd54-794d3a6f6456) error: failed to create pool : {"error_msg":"Connection drain timeout must be explict defined.","error_code":"ELB.8902","request_id":"7cf9da9b3993340ba966659a2d272e3c"}, status code: 400
 ```

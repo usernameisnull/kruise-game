@@ -1,9 +1,8 @@
-# 这个是文档里的
-# https://github.com/openkruise/kruise-game/blob/master/docs/%E4%B8%AD%E6%96%87/%E7%94%A8%E6%88%B7%E6%89%8B%E5%86%8C/%E7%BD%91%E7%BB%9C%E6%A8%A1%E5%9E%8B.md#%E7%A4%BA%E4%BE%8B%E8%AF%B4%E6%98%8E-5
+# 使用已有的EIP
 apiVersion: game.kruise.io/v1alpha1
 kind: GameServerSet
 metadata:
-  name: gs-elb-union
+  name: gs-eip-exist
   namespace: kruise-game-system
 spec:
   replicas: 1
@@ -11,16 +10,10 @@ spec:
     rollingUpdate:
       podUpdatePolicy: InPlaceIfPossible
   network:
-    networkType: HwCloud-ELB
+    networkType: HwCloud-CCE-EIP
     networkConf:
-      - name: ElbIds
-        value: debd5c46-9ce5-44fc-ba07-4e911ad1ae36
-      # - name: ContainerPorts
-      #   value: "gameserver:80"
-      - name: PortProtocols
-        value: "80/TCP"
-      - name: ElbClass
-        value: union
+      - name: yangtse.io/eip-id
+        value: "120fc017-ad05-499c-9e3c-0c8585c8300b" # 使用已有的EIP
   gameServerTemplate:
     spec:
       containers:

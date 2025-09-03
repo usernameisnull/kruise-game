@@ -1,0 +1,168 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    apps.kruise.io/runtime-containers-meta: '{"containers":[{"name":"nginx","containerID":"containerd://d8d6edb39ee0b92b80599c9bd79411fe92035cf0c4aab51ee7d8fea36f0a6e14","restartCount":0,"hashes":{"plainHash":808994484,"plainHashWithoutResources":0,"extractedEnvFromMetadataHash":86995377}}]}'
+    game.kruise.io/network-conf: '[{"name":"PortProtocols","value":"80/TCP"},{"name":"kubernetes.io/elb.class","value":"performance"},{"name":"kubernetes.io/elb.id","value":"8f4cf216-a659-40dc-8c77-6068b036ba56"},{"name":"kubernetes.io/elb.connection-drain-enable","value":"true"}]'
+    game.kruise.io/network-status: '{"currentNetworkState":"NotReady","createTime":null,"lastTransitionTime":null}'
+    game.kruise.io/network-trigger-time: "2025-07-17 11:30:15"
+    game.kruise.io/network-type: HwCloud-CCE-ELB
+    game.kruise.io/opsState-last-changed-time: "2025-07-17 11:30:15"
+    lifecycle.apps.kruise.io/timestamp: "2025-07-17T03:30:09Z"
+  creationTimestamp: "2025-07-17T03:30:10Z"
+  generateName: gs-elb-performance-
+  labels:
+    apps.kubernetes.io/pod-index: "0"
+    controller-revision-hash: gs-elb-performance-b7444c75
+    game.kruise.io/gs-delete-priority: "0"
+    game.kruise.io/gs-opsState: None
+    game.kruise.io/gs-state: Ready
+    game.kruise.io/gs-update-priority: "0"
+    game.kruise.io/network-disabled: "false"
+    game.kruise.io/owner-gss: gs-elb-performance
+    lifecycle.apps.kruise.io/state: Normal
+    statefulset.kubernetes.io/pod-name: gs-elb-performance-0
+  name: gs-elb-performance-0
+  namespace: kruise-game-system
+  ownerReferences:
+  - apiVersion: apps.kruise.io/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: StatefulSet
+    name: gs-elb-performance
+    uid: 22bd22ba-6a1b-4b2e-b670-cd8ccc71b32e
+  resourceVersion: "9752664"
+  uid: 8183ac71-a696-402f-b367-1d88af61016c
+spec:
+  containers:
+  - env:
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: metadata.name
+    image: nginx
+    imagePullPolicy: Always
+    lifecycle:
+      postStart:
+        exec:
+          command:
+          - /bin/sh
+          - -c
+          - echo "<html><body><h1>Welcome to $POD_NAME</h1></body></html>" > /usr/share/nginx/html/index.html
+    name: nginx
+    ports:
+    - containerPort: 80
+      protocol: TCP
+    resources: {}
+    terminationMessagePath: /dev/termination-log
+    terminationMessagePolicy: File
+    volumeMounts:
+    - mountPath: /usr/share/nginx/html
+      name: nginx-html
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: kube-api-access-lpzdw
+      readOnly: true
+  dnsConfig:
+    options:
+    - name: single-request-reopen
+      value: ""
+    - name: timeout
+      value: "2"
+  dnsPolicy: ClusterFirst
+  enableServiceLinks: true
+  hostname: gs-elb-performance-0
+  nodeName: 192.168.1.87
+  preemptionPolicy: PreemptLowerPriority
+  priority: 0
+  readinessGates:
+  - conditionType: InPlaceUpdateReady
+  - conditionType: KruisePodReady
+  restartPolicy: Always
+  schedulerName: default-scheduler
+  securityContext: {}
+  serviceAccount: default
+  serviceAccountName: default
+  subdomain: gs-elb-performance
+  terminationGracePeriodSeconds: 30
+  tolerations:
+  - effect: NoExecute
+    key: node.kubernetes.io/not-ready
+    operator: Exists
+    tolerationSeconds: 300
+  - effect: NoExecute
+    key: node.kubernetes.io/unreachable
+    operator: Exists
+    tolerationSeconds: 300
+  volumes:
+  - emptyDir: {}
+    name: nginx-html
+  - name: kube-api-access-lpzdw
+    projected:
+      defaultMode: 420
+      sources:
+      - serviceAccountToken:
+          expirationSeconds: 3607
+          path: token
+      - configMap:
+          items:
+          - key: ca.crt
+            path: ca.crt
+          name: kube-root-ca.crt
+      - downwardAPI:
+          items:
+          - fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+            path: namespace
+status:
+  conditions:
+  - lastProbeTime: null
+    lastTransitionTime: "2025-07-17T03:30:10Z"
+    status: "True"
+    type: KruisePodReady
+  - lastProbeTime: null
+    lastTransitionTime: "2025-07-17T03:30:10Z"
+    status: "True"
+    type: InPlaceUpdateReady
+  - lastProbeTime: null
+    lastTransitionTime: "2025-07-17T03:30:10Z"
+    status: "True"
+    type: PodReadyToStartContainers
+  - lastProbeTime: null
+    lastTransitionTime: "2025-07-17T03:30:10Z"
+    status: "True"
+    type: Initialized
+  - lastProbeTime: null
+    lastTransitionTime: "2025-07-17T03:30:10Z"
+    status: "True"
+    type: Ready
+  - lastProbeTime: null
+    lastTransitionTime: "2025-07-17T03:30:10Z"
+    status: "True"
+    type: ContainersReady
+  - lastProbeTime: null
+    lastTransitionTime: "2025-07-17T03:30:10Z"
+    status: "True"
+    type: PodScheduled
+  containerStatuses:
+  - containerID: containerd://d8d6edb39ee0b92b80599c9bd79411fe92035cf0c4aab51ee7d8fea36f0a6e14
+    image: docker.io/library/nginx:latest
+    imageID: docker.io/library/nginx@sha256:dc85890ba9763fe38b178b337d4ccc802874afe3c02e6c98c304f65b08af958f
+    lastState: {}
+    name: nginx
+    ready: true
+    restartCount: 0
+    started: true
+    state:
+      running:
+        startedAt: "2025-07-17T03:30:10Z"
+  hostIP: 192.168.1.87
+  hostIPs:
+  - ip: 192.168.1.87
+  phase: Running
+  podIP: 192.168.1.190
+  podIPs:
+  - ip: 192.168.1.190
+  qosClass: BestEffort
+  startTime: "2025-07-17T03:30:10Z"

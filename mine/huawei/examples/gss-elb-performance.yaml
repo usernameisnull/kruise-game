@@ -1,0 +1,48 @@
+# tt: transparent traffic
+apiVersion: game.kruise.io/v1alpha1
+kind: GameServerSet
+metadata:
+  name: gs-elb-performance-2
+  namespace: kruise-game-system
+spec:
+  replicas: 2
+  updateStrategy:
+    rollingUpdate:
+      podUpdatePolicy: InPlaceIfPossible
+  network:
+    networkType: HwCloud-CCE-ELB
+    networkConf:
+      - name: PortProtocols
+        value: "80/TCPUDP"
+      - name: kubernetes.io/elb.class
+        value: performance
+      - name: kubernetes.io/elb.id
+        value: 8f4cf216-a659-40dc-8c77-6068b036ba56
+      - name: kubernetes.io/elb.connection-drain-enable
+        value: "true"
+      # 如果指定了kubernetes.io/elb.connection-drain-enable, 就必须指定下面的
+      - name: kubernetes.io/elb.connection-drain-timeout
+        value: "300"
+  gameServerTemplate:
+    spec:
+      containers:
+#        - image: registry.cn-hangzhou.aliyuncs.com/gs-demo/gameserver:network
+        - image: nginx
+          name: nginx
+          ports:
+            - containerPort: 80
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          volumeMounts:
+            - name: nginx-html
+              mountPath: /usr/share/nginx/html
+          lifecycle:
+            postStart:
+              exec:
+                command: [ "/bin/sh", "-c", "echo \"<html><body><h1>Welcome to $POD_NAME</h1></body></html>\" > /usr/share/nginx/html/index.html" ]
+      volumes:
+        - name: nginx-html
+          emptyDir: { }

@@ -2,14 +2,18 @@
 ```
 tansj
 pengchengbo30036525
-j5rrThRS8PUHr2%@@_9u
+%8d6pcvP+VGFmDp2577D
 ```
 ## 企业项目
 E022-彭成博-4W
+id: aff97261-4dbd-4593-8236-d7a5daf6a943
 
 ## ELB
 id: 8f4cf216-a659-40dc-8c77-6068b036ba56
 ip地址: 189.1.225.136
+共享模式:
+id: c1d8f4c6-7aef-4596-8c7c-2de87ff89545
+ip地址: 159.138.147.213
 
 ## 绑定k8s worker node的EIP
 节点1: 159.138.54.250

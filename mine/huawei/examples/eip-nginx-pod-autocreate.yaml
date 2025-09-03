@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: eip-nginx-pod
+  annotations:
+    # 键值对格式修复
+    yangtse.io/pod-with-eip: "true"
+    yangtse.io/eip-bandwidth-size: "5"
+    yangtse.io/eip-network-type: "5_bgp"
+    yangtse.io/eip-charge-mode: "traffic"    
+spec:
+  containers:
+    - name: container-0
+      image: nginx:alpine
+      resources:
+        limits:
+          cpu: 100m
+          memory: 200Mi
+        requests:
+          cpu: 80m    # 请求值略低于限制
+          memory: 200Mi
+      securityContext:  # 添加安全上下文
+        runAsUser: 1000
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true

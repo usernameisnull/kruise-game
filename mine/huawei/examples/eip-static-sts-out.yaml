@@ -1,0 +1,141 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    yangtse.io/allocated-eip-id: fd096602-0625-448f-8447-22cae1647a01
+    yangtse.io/allocated-ipv4-eip: 121.91.172.6
+    yangtse.io/eip-bandwidth-size: "5"
+    yangtse.io/eip-charge-mode: traffic
+    yangtse.io/eip-network-type: 5_bgp
+    yangtse.io/pod-with-eip: "true"
+    yangtse.io/static-eip: "true"
+    yangtse.io/static-eip-expire-duration: 5m
+    yangtse.io/static-eip-expire-no-cascading: "false"
+  creationTimestamp: "2025-07-15T02:39:15Z"
+  generateName: static-sts-nginx-
+  labels:
+    app: nginx
+    apps.kubernetes.io/pod-index: "0"
+    controller-revision-hash: static-sts-nginx-5997b97fb8
+    statefulset.kubernetes.io/pod-name: static-sts-nginx-0
+  name: static-sts-nginx-0
+  namespace: kruise-game-system
+  ownerReferences:
+    - apiVersion: apps/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: StatefulSet
+      name: static-sts-nginx
+      uid: 21c90eb3-3272-4383-8f0a-5f403e6e1e3a
+  resourceVersion: "8717174"
+  uid: adadfd9a-7650-47a7-a142-ebcbc4536783
+spec:
+  containers:
+    - image: nginx:alpine
+      imagePullPolicy: IfNotPresent
+      name: container-0
+      resources:
+        limits:
+          cpu: 100m
+          memory: 200Mi
+        requests:
+          cpu: 100m
+          memory: 200Mi
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      volumeMounts:
+        - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+          name: kube-api-access-d8l4x
+          readOnly: true
+  dnsConfig:
+    options:
+      - name: single-request-reopen
+        value: ""
+      - name: timeout
+        value: "2"
+  dnsPolicy: ClusterFirst
+  enableServiceLinks: true
+  hostname: static-sts-nginx-0
+  imagePullSecrets:
+    - name: default-secret
+  nodeName: 192.168.1.158
+  preemptionPolicy: PreemptLowerPriority
+  priority: 0
+  restartPolicy: Always
+  schedulerName: default-scheduler
+  securityContext: {}
+  serviceAccount: default
+  serviceAccountName: default
+  subdomain: nginx
+  terminationGracePeriodSeconds: 30
+  tolerations:
+    - effect: NoExecute
+      key: node.kubernetes.io/not-ready
+      operator: Exists
+      tolerationSeconds: 300
+    - effect: NoExecute
+      key: node.kubernetes.io/unreachable
+      operator: Exists
+      tolerationSeconds: 300
+  volumes:
+    - name: kube-api-access-d8l4x
+      projected:
+        defaultMode: 420
+        sources:
+          - serviceAccountToken:
+              expirationSeconds: 3607
+              path: token
+          - configMap:
+              items:
+                - key: ca.crt
+                  path: ca.crt
+              name: kube-root-ca.crt
+          - downwardAPI:
+              items:
+                - fieldRef:
+                    apiVersion: v1
+                    fieldPath: metadata.namespace
+                  path: namespace
+status:
+  conditions:
+    - lastProbeTime: null
+      lastTransitionTime: "2025-07-15T02:39:24Z"
+      status: "True"
+      type: PodReadyToStartContainers
+    - lastProbeTime: null
+      lastTransitionTime: "2025-07-15T02:39:15Z"
+      status: "True"
+      type: Initialized
+    - lastProbeTime: null
+      lastTransitionTime: "2025-07-15T02:39:24Z"
+      status: "True"
+      type: Ready
+    - lastProbeTime: null
+      lastTransitionTime: "2025-07-15T02:39:24Z"
+      status: "True"
+      type: ContainersReady
+    - lastProbeTime: null
+      lastTransitionTime: "2025-07-15T02:39:15Z"
+      status: "True"
+      type: PodScheduled
+  containerStatuses:
+    - containerID: containerd://5ad85c0cad95480538da3958a47ecf05eaf1264b1d14d41036b06c6418842415
+      image: docker.io/library/nginx:alpine
+      imageID: docker.io/library/nginx@sha256:5d1044294f0347e320d549e0add523dd3265580e9093458d92cf558db5ad62e5
+      lastState: {}
+      name: container-0
+      ready: true
+      restartCount: 0
+      started: true
+      state:
+        running:
+          startedAt: "2025-07-15T02:39:24Z"
+  hostIP: 192.168.1.158
+  hostIPs:
+    - ip: 192.168.1.158
+  phase: Running
+  podIP: 192.168.1.142
+  podIPs:
+    - ip: 192.168.1.142
+  qosClass: Guaranteed
+  startTime: "2025-07-15T02:39:15Z"
