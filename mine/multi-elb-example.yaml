@@ -14,6 +14,8 @@ spec:
         value: 63a86884-8cb3-4217-924a-167d11b6e924/BGP/27.106.127.231,5a492ba9-fdf8-4da7-b61d-a267989cdd82/CMCC/27.106.104.80,30c8d509-fa91-479d-8c10-21b66f80d6ac/CUCC/49.0.230.64
       - name: PortProtocols
         value: "8888/TCPUDP" #支持TCP UDP复用同个端口
+      - name: kubernetes.io/elb.lb-algorithm
+        value: LEAST_CONNECTIONS
     networkType: HuaweiCloud-Multi-ELBs
   gameServerTemplate:
     spec:

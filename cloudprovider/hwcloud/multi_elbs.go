@@ -19,6 +19,7 @@ package hwcloud
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"sync"
@@ -57,6 +58,14 @@ const (
 
 	PrefixReadyReadinessGate = "service.readiness.hwcloud.com/"
 	ServiceProxyName         = "service.kubernetes.io/service-proxy-name"
+)
+
+var (
+	hwOptions               = make(map[string]string)
+	notAllowedAnnotationKey = []string{
+		// 应该使用已经存在的
+		"kubernetes.io/elb.autocreate",
+	}
 )
 
 type MultiElbsPlugin struct {
@@ -460,6 +469,9 @@ func (m *MultiElbsPlugin) consSvc(podLbsPorts *lbsPorts, conf *multiELBsConfig, 
 		ElbConfigHashKey:   util.GetHash(conf),
 		//LBHealthCheckFlagAnnotationKey: conf.lBHealthCheckFlag,
 	}
+	// 把所有的其他设置的配置都塞进去
+	maps.Copy(svcAnnotations, hwOptions)
+
 	//if conf.lBHealthCheckFlag == "on" {
 	//	svcAnnotations[LBHealthCheckTypeAnnotationKey] = conf.lBHealthCheckType
 	//	svcAnnotations[LBHealthCheckConnectPortAnnotationKey] = conf.lBHealthCheckConnectPort
@@ -679,7 +691,11 @@ func parseMultiELBsConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*multi
 				return nil, fmt.Errorf("invalid AllocatePolicy %s", allocatePolicy)
 			}
 		default:
-
+			if !util.IsStringInList(c.Name, notAllowedAnnotationKey) {
+				hwOptions[c.Name] = c.Value
+			} else {
+				log.Warningf("[%s] not allowed annotation key %s", MultiElbsNetwork, c.Name)
+			}
 		}
 	}
 
