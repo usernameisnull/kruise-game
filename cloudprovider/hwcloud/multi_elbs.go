@@ -56,15 +56,22 @@ const (
 
 	//ProtocolTCPUDP corev1.Protocol = "TCPUDP"
 
-	PrefixReadyReadinessGate = "service.readiness.hwcloud.com/"
-	ServiceProxyName         = "service.kubernetes.io/service-proxy-name"
+	PrefixReadyReadinessGate  = "service.readiness.hwcloud.com/"
+	ServiceProxyName          = "service.kubernetes.io/service-proxy-name"
+	ElbClassConfigUnion       = "union"
+	ElbClassConfigPerformance = "performance"
+	HwElbClassKeyName         = "kubernetes.io/elb.class"
+	HwElbAutoCreateKeyName    = "kubernetes.io/elb.autocreate"
 )
 
 var (
+	elbConfigClassMap       = map[string]string{ElbClassConfigName: HwElbClassKeyName}
 	hwOptions               = make(map[string]string)
 	notAllowedAnnotationKey = []string{
-		// 应该使用已经存在的
-		"kubernetes.io/elb.autocreate",
+		// 应该使用已经存在的elb,而不是自动创建的
+		HwElbAutoCreateKeyName,
+		// 使用ElbClassConfigName
+		HwElbClassKeyName,
 	}
 )
 
@@ -638,6 +645,12 @@ func parseMultiELBsConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*multi
 
 	for _, c := range conf {
 		switch c.Name {
+		case ElbClassConfigName:
+			if c.Value != ElbClassConfigUnion && c.Value != ElbClassConfigPerformance {
+				return nil, fmt.Errorf("%s is invalid value of %s, use %s or %s ",
+					c.Value, ElbClassConfigName, ElbClassConfigUnion, ElbClassConfigPerformance)
+			}
+			hwOptions[elbConfigClassMap[ElbClassConfigName]] = c.Value
 		case ElbIdNamesConfigName:
 			for _, ElbIdNamesConfig := range strings.Split(c.Value, ",") {
 				if ElbIdNamesConfig != "" {
@@ -694,7 +707,11 @@ func parseMultiELBsConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*multi
 			if !util.IsStringInList(c.Name, notAllowedAnnotationKey) {
 				hwOptions[c.Name] = c.Value
 			} else {
-				log.Warningf("[%s] not allowed annotation key %s", MultiElbsNetwork, c.Name)
+				if c.Name == HwElbClassKeyName {
+					log.Warningf("use [%s] instead of  %s", ElbClassConfigName, HwElbClassKeyName)
+				} else {
+					log.Warningf("plugin [%s] not allowe annotation key %s", MultiElbsNetwork, c.Name)
+				}
 			}
 		}
 	}
