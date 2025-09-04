@@ -43,14 +43,14 @@ const (
 	MultiElbsNetwork = "HuaweiCloud-Multi-ELBs"
 	AliasMultiElbs   = "Multi-ELBs-Network"
 
-	// ConfigNames defined by OKG
+	// ElbIdNamesConfigName ConfigNames defined by OKG
 	ElbIdNamesConfigName     = "ElbIdNames"
 	AllocatePolicyConfigName = "AllocatePolicy"
 
-	// service annotation defined by OKG
+	// LBIDBelongIndexKey service annotation defined by OKG
 	LBIDBelongIndexKey = "game.kruise.io/lb-belong-index"
 
-	// service label defined by OKG
+	// ServiceBelongNetworkTypeKey service label defined by OKG
 	ServiceBelongNetworkTypeKey = "game.kruise.io/network-type"
 
 	//ProtocolTCPUDP corev1.Protocol = "TCPUDP"
@@ -164,11 +164,11 @@ func (m *MultiElbsPlugin) OnPodAdded(c client.Client, pod *corev1.Pod, ctx conte
 			lbNames = append(lbNames, lbName)
 		}
 	}
-	for _, lbName := range lbNames {
-		pod.Spec.ReadinessGates = append(pod.Spec.ReadinessGates, corev1.PodReadinessGate{
-			ConditionType: corev1.PodConditionType(PrefixReadyReadinessGate + pod.GetName() + "-" + strings.ToLower(lbName)),
-		})
-	}
+	//for _, lbName := range lbNames {
+	//	pod.Spec.ReadinessGates = append(pod.Spec.ReadinessGates, corev1.PodReadinessGate{
+	//		ConditionType: corev1.PodConditionType(PrefixReadyReadinessGate + pod.GetName() + "-" + strings.ToLower(lbName)),
+	//	})
+	//}
 
 	return pod, nil
 }
@@ -335,6 +335,29 @@ func (m *MultiElbsPlugin) OnPodUpdated(c client.Client, pod *corev1.Pod, ctx con
 		networkStatus.ExternalAddresses = externalAddresses
 	}
 
+	//for _, lbName := range conf.lbNames {
+	//	conditionType := corev1.PodConditionType(PrefixReadyReadinessGate + pod.GetName() + "-" + strings.ToLower(lbName))
+	//
+	//	// 设置ReadinessGate Condition状态
+	//	conditionStatus := corev1.ConditionFalse
+	//	if networkStatus.CurrentNetworkState == gamekruiseiov1alpha1.NetworkReady {
+	//		conditionStatus = corev1.ConditionTrue
+	//	}
+	//
+	//	// 查找或创建Condition
+	//	condition, conditionIndex := util.GetPodConditionFromList(pod.Status.Conditions, conditionType)
+	//	if conditionIndex == nil {
+	//		conditionSpec := &corev1.PodCondition{
+	//			Type:   conditionType,
+	//			Status: conditionStatus,
+	//		}
+	//		pod.Status.Conditions = append(pod.Status.Conditions, *conditionSpec)
+	//	} else {
+	//		pod.Status.Conditions[condition].Status = conditionStatus
+	//		pod.Status.Conditions[condition].LastTransitionTime = metav1.Now()
+	//	}
+	//}
+
 	networkStatus.CurrentNetworkState = gamekruiseiov1alpha1.NetworkReady
 	pod, err = networkManager.UpdateNetworkStatus(*networkStatus, pod)
 	return pod, cperrors.ToPluginError(err, cperrors.InternalError)
@@ -377,14 +400,15 @@ func (m *MultiElbsPlugin) OnPodDeleted(c client.Client, pod *corev1.Pod, ctx con
 }
 
 func init() {
-	MultiElbsPlugin := MultiElbsPlugin{
+	m := MultiElbsPlugin{
 		mutex: sync.RWMutex{},
 	}
-	hwCloudProvider.registerPlugin(&MultiElbsPlugin)
+	hwCloudProvider.registerPlugin(&m)
 }
 
 type multiELBsConfig struct {
 	lbNames               map[string]string
+	lbIp                  map[string]string
 	idList                [][]string
 	targetPorts           []int
 	protocols             []corev1.Protocol
@@ -450,7 +474,7 @@ func (m *MultiElbsPlugin) consSvc(podLbsPorts *lbsPorts, conf *multiELBsConfig, 
 	//	}
 	//}
 	svcAnnotations[LBIDBelongIndexKey] = strconv.Itoa(podLbsPorts.index)
-
+	svcAnnotations[ElbMappingPoolAnnotationKey] = lbName
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        pod.GetName() + "-" + strings.ToLower(lbName),
@@ -471,6 +495,7 @@ func (m *MultiElbsPlugin) consSvc(podLbsPorts *lbsPorts, conf *multiELBsConfig, 
 			},
 			Ports: svcPorts,
 			//LoadBalancerClass: &loadBalancerClass,
+			LoadBalancerIP: conf.lbIp[selectId],
 		},
 	}, nil
 }
@@ -478,11 +503,15 @@ func (m *MultiElbsPlugin) consSvc(podLbsPorts *lbsPorts, conf *multiELBsConfig, 
 func (m *MultiElbsPlugin) allocate(conf *multiELBsConfig, nsName string) (*lbsPorts, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-
-	// check if pod is already allocated
-	if m.podAllocate[nsName] != nil {
-		return m.podAllocate[nsName], nil
+	// 在更新gss的PortProtocols端口的时候, podAllocate为nil导致panic
+	if m.podAllocate == nil {
+		return nil, cperrors.NewPluginError(cperrors.ApiCallError, "podAllocate is nil")
 	}
+	// 这里注释掉是因为, 如果我修改了gss的PortProtocols端口的时候,就会导致这个端口不会更新
+	// check if pod is already allocated
+	//if m.podAllocate[nsName] != nil {
+	//	return m.podAllocate[nsName], nil
+	//}
 
 	// if the pod has not been allocated, allocate new ports to it
 	var ports []int32
@@ -588,6 +617,7 @@ func parseMultiELBsConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*multi
 	lbNames := make(map[string]string)
 	idList := make([][]string, 0)
 	nameNums := make(map[string]int)
+	lbIp := make(map[string]string)
 	ports := make([]int, 0)
 	protocols := make([]corev1.Protocol, 0)
 	isFixed := false
@@ -600,12 +630,13 @@ func parseMultiELBsConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*multi
 			for _, ElbIdNamesConfig := range strings.Split(c.Value, ",") {
 				if ElbIdNamesConfig != "" {
 					idName := strings.Split(ElbIdNamesConfig, "/")
-					if len(idName) != 2 {
-						return nil, fmt.Errorf("invalid ElbIdNames %s. You should input as the format {elb-id-0}/{name-0}", c.Value)
+					if len(idName) != 3 {
+						return nil, fmt.Errorf("invalid ElbIdNames %s. You should input as the format {elb-id-0}/{operator-0}/{elb-outer-ip-0}", c.Value)
 					}
 
 					id := idName[0]
 					name := idName[1]
+					ip := idName[2]
 
 					nameNum := nameNums[name]
 					if nameNum >= len(idList) {
@@ -615,6 +646,7 @@ func parseMultiELBsConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*multi
 					}
 					nameNums[name]++
 					lbNames[id] = name
+					lbIp[id] = ip
 				}
 			}
 		case PortProtocolsConfigName:
@@ -646,12 +678,14 @@ func parseMultiELBsConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*multi
 			if allocatePolicy != "default" && allocatePolicy != "balanced" {
 				return nil, fmt.Errorf("invalid AllocatePolicy %s", allocatePolicy)
 			}
+		default:
+
 		}
 	}
 
 	// check idList
 	if len(idList) == 0 {
-		return nil, fmt.Errorf("invalid ElbIdNames. You should input as the format {elb-id-0}/{name-0}")
+		return nil, fmt.Errorf("invalid ElbIdNames. You should input as the format {elb-id-0}/{operator-0}/{elb-outer-ip-0}")
 	}
 	num := len(idList[0])
 	for i := 1; i < len(idList); i++ {
@@ -679,6 +713,7 @@ func parseMultiELBsConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*multi
 		isFixed:               isFixed,
 		externalTrafficPolicy: externalTrafficPolicy,
 		allocatePolicy:        allocatePolicy,
+		lbIp:                  lbIp,
 		//elbHealthConfig:       elbHealthConfig,
 	}, nil
 }

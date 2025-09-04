@@ -755,7 +755,7 @@ func parseCCELbConfig(conf []gamekruiseiov1alpha1.NetworkConfParams) (*cceElbCon
 		case EnableCCEScatterConfigName:
 			v, err := strconv.ParseBool(c.Value)
 			if err == nil {
-				res.enableCCEScatter = v // ||| 这个没什么用
+				res.enableCCEScatter = v
 			}
 		case ElbIdsConfigName:
 			//if specifyElbId {
