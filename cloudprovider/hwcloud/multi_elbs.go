@@ -528,9 +528,9 @@ func (m *MultiElbsPlugin) allocate(conf *multiELBsConfig, nsName string) (*lbsPo
 	}
 	// 这里注释掉是因为, 如果我修改了gss的PortProtocols端口的时候,就会导致这个端口不会更新
 	// check if pod is already allocated
-	//if m.podAllocate[nsName] != nil {
-	//	return m.podAllocate[nsName], nil
-	//}
+	if m.podAllocate[nsName] != nil {
+		return m.podAllocate[nsName], nil
+	}
 
 	// if the pod has not been allocated, allocate new ports to it
 	var ports []int32
